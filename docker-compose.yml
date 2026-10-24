@@ -1,0 +1,29 @@
+services:
+  cv-scorer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cv_scorer_ai_app
+    restart: unless-stopped
+    ports:
+      - "8000:8000"  # Cổng duy nhất: TalentMatch Enterprise Web UI & REST API
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTHONPATH=/app
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+    volumes:
+      # Volume 1: Dữ liệu CV mẫu và Lịch sử chấm điểm (Persistent Data)
+      - ./data:/app/data
+
+      # Volume 2: Cache mô hình AI (PaddleOCR weights + HuggingFace embeddings)
+      - ./models_cache/huggingface:/root/.cache/huggingface
+      - ./models_cache/paddleocr:/root/.paddleocr
+
+      # Volume 3: Development Live-Reload
+      - ./schemas:/app/schemas
+      - ./services:/app/services
+      - ./utils:/app/utils
+      - ./core:/app/core
+      - ./models:/app/models
+      - ./backend:/app/backend
+      - ./frontend:/app/frontend

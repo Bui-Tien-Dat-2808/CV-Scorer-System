@@ -1,0 +1,25 @@
+# Python cache & virtual environment
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+.env
+
+# Git & IDE
+.git/
+.gitignore
+.vscode/
+.idea/
+.DS_Store
+
+# Temporary files & local models cache
+models_cache/
+data/models_cache/
+temp/
+*.log
+.pytest_cache/
+

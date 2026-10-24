@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TalentMatch Enterprise | Hệ thống Thẩm định Hồ sơ & Chuẩn hóa Tuyển dụng</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <link rel="stylesheet" href="/assets/css/styles.css">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+          },
+          colors: {
+            brand: {
+              50: '#eff6ff',
+              100: '#dbeafe',
+              500: '#3b82f6',
+              600: '#2563eb',
+              700: '#1d4ed8',
+              800: '#1e40af',
+              900: '#1e3a8a',
+            }
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-slate-50 text-slate-900 min-h-screen flex flex-col font-sans">
+
+  <!-- Header -->
+  <header class="app-header sticky top-0 z-50 bg-white border-b border-slate-200">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <div class="flex items-center space-x-3">
+          <div class="w-8 h-8 rounded bg-blue-700 flex items-center justify-center text-white font-bold text-sm tracking-wider">
+            TM
+          </div>
+          <div>
+            <div class="text-base font-semibold text-slate-900 leading-tight">TalentMatch Enterprise</div>
+            <div class="text-xs text-slate-500">Hệ thống Sàng lọc & Thẩm định Ứng viên Chuẩn hóa</div>
+          </div>
+        </div>
+
+        <!-- Navigation Tabs -->
+        <nav class="flex space-x-1" id="navTabs">
+          <button class="nav-tab active" data-tab="tab-single">
+            Thẩm định Hồ sơ
+          </button>
+          <button class="nav-tab" data-tab="tab-batch">
+            Xếp hạng Hàng loạt
+          </button>
+          <button class="nav-tab" data-tab="tab-history">
+            Nhật ký Đánh giá
+          </button>
+        </nav>
+
+        <!-- System Status Indicator -->
+        <div class="flex items-center space-x-2 text-xs text-slate-600 bg-slate-100 px-3 py-1.5 rounded-md border border-slate-200">
+          <span class="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
+          <span class="font-medium" id="systemStatusText">Core Services Ready</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Workspace -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+
+    <!-- Global Alert Container -->
+    <div id="alertBox" class="hidden mb-6 p-4 rounded-md border text-sm transition-all duration-200"></div>
+
+    <!-- ===================================================================== -->
+    <!-- TAB 1: SINGLE CV EVALUATION -->
+    <!-- ===================================================================== -->
+    <section id="tab-single" class="tab-pane">
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+        <!-- Left Column: Input Form (5 cols) -->
+        <div class="lg:col-span-5 space-y-6">
+          <div class="card">
+            <div class="card-header flex items-center justify-between">
+              <span>1. Tiêu chí Tuyển dụng (Job Description)</span>
+              <span class="text-xs font-normal text-slate-500">Chuẩn hóa tiêu chuẩn</span>
+            </div>
+            <div class="card-body space-y-4">
+              <div>
+                <label class="block text-xs font-semibold text-slate-700 mb-1">VỊ TRÍ TUYỂN DỤNG</label>
+                <input type="text" id="jdTitle" class="w-full text-sm px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-600" value="Python Backend Developer">
+              </div>
+
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-xs font-semibold text-slate-700 mb-1">KINH NGHIỆM TỐI THIỂU</label>
+                  <div class="relative">
+                    <input type="number" id="jdExp" step="0.5" min="0" max="20" class="w-full text-sm px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-600" value="2.0">
+                    <span class="absolute right-3 top-2 text-xs text-slate-400">năm</span>
+                  </div>
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold text-slate-700 mb-1">TRÌNH ĐỘ HỌC VẤN</label>
+                  <select id="jdEdu" class="w-full text-sm px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-600 bg-white">
+                    <option value="None">Không yêu cầu</option>
+                    <option value="Associate">Cao đẳng / Associate</option>
+                    <option value="Bachelor" selected>Cử nhân / Kỹ sư (Bachelor)</option>
+                    <option value="Master">Thạc sĩ (Master)</option>
+                    <option value="PhD">Tiến sĩ (PhD)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label class="block text-xs font-semibold text-slate-700 mb-1">KỸ NĂNG CHUYÊN MÔN & LEVEL YÊU CẦU</label>
+                <textarea id="jdSkills" rows="3" class="w-full text-sm px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-600" placeholder="Python (Intermediate), FastAPI (Basic), PostgreSQL (Good), Docker (Basic)">Python (Intermediate), FastAPI (Basic), PostgreSQL (Good), Docker (Basic)</textarea>
+                <p class="text-[11px] text-slate-500 mt-1">Hỗ trợ các cấp độ: Basic / Intermediate / Good / Senior</p>
+              </div>
+
+              <div>
+                <label class="block text-xs font-semibold text-slate-700 mb-1">NGOẠI NGỮ BẮT BUỘC</label>
+                <input type="text" id="jdLang" class="w-full text-sm px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-600" value="English">
+              </div>
+            </div>
+          </div>
+
+          <!-- Document Upload Box -->
+          <div class="card">
+            <div class="card-header flex items-center justify-between">
+              <span>2. Hồ sơ Ứng viên (Curriculum Vitae)</span>
+              <span class="text-xs font-normal text-slate-500">PDF, DOCX, Ảnh Scan</span>
+            </div>
+            <div class="card-body space-y-4">
+              <div id="dropzone" class="dropzone">
+                <input type="file" id="cvFileInput" class="hidden" accept=".pdf,.docx,.png,.jpg,.jpeg">
+                <svg class="mx-auto h-9 w-9 text-slate-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
+                <p class="text-sm font-medium text-slate-700" id="fileUploadPrompt">Kéo thả file CV vào đây hoặc <span class="text-blue-600 underline">duyệt từ máy tính</span></p>
+                <p class="text-xs text-slate-500 mt-1">Hỗ trợ PDF Digital (tốc độ cao) và PDF Scan (tự động kích hoạt OCR)</p>
+              </div>
+
+              <div id="selectedFileInfo" class="hidden items-center justify-between p-3 bg-blue-50 border border-blue-200 rounded-md text-xs">
+                <div class="flex items-center space-x-2 truncate">
+                  <svg class="w-4 h-4 text-blue-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                  </svg>
+                  <span id="selectedFileName" class="font-medium text-blue-900 truncate">cv_sample.pdf</span>
+                </div>
+                <button type="button" id="removeFileBtn" class="text-slate-500 hover:text-red-600 font-semibold ml-2">Xóa</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Evaluation Engine Selector -->
+          <div class="card">
+            <div class="card-header">
+              <span>3. Động cơ Phân tích Chuyên sâu (Verification Engine)</span>
+            </div>
+            <div class="card-body space-y-3">
+              <div class="grid grid-cols-2 gap-3">
+                <label class="flex items-center p-3 border rounded-md cursor-pointer hover:bg-slate-50 transition border-blue-600 bg-blue-50/50" id="engineGeminiLabel">
+                  <input type="radio" name="llmProvider" value="gemini" checked class="text-blue-600 focus:ring-blue-500">
+                  <div class="ml-2.5">
+                    <div class="text-xs font-semibold text-slate-800">Cloud Enterprise</div>
+                    <div class="text-[11px] text-slate-500">Gemini 2.5 Flash API</div>
+                  </div>
+                </label>
+                <label class="flex items-center p-3 border rounded-md cursor-pointer hover:bg-slate-50 transition border-slate-200" id="engineLocalLabel">
+                  <input type="radio" name="llmProvider" value="local" class="text-blue-600 focus:ring-blue-500">
+                  <div class="ml-2.5">
+                    <div class="text-xs font-semibold text-slate-800">On-Premise Core</div>
+                    <div class="text-[11px] text-slate-500">Local LLM GGUF</div>
+                  </div>
+                </label>
+              </div>
+
+              <div id="apiKeyGroup" class="pt-1">
+                <label class="block text-xs font-semibold text-slate-700 mb-1">GEMINI API KEY (TÙY CHỌN NẾU SERVER ĐÃ CÓ BIẾN MÔI TRƯỜNG)</label>
+                <input type="password" id="geminiApiKey" class="w-full text-xs px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-600 font-mono" placeholder="AIzaSy... (để trống nếu dùng server default)">
+              </div>
+
+              <button id="btnEvaluate" type="button" class="w-full btn-primary flex items-center justify-center space-x-2 py-2.5 text-sm font-semibold">
+                <span id="btnEvaluateText">Tiến hành Thẩm định Hồ sơ</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right Column: Results Display (7 cols) -->
+        <div class="lg:col-span-7 space-y-6">
+
+          <!-- Empty State (Before Evaluation) -->
+          <div id="resultsEmptyState" class="card p-12 text-center text-slate-500">
+            <svg class="mx-auto h-12 w-12 text-slate-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+            </svg>
+            <h3 class="text-sm font-semibold text-slate-700">Chưa có dữ liệu thẩm định</h3>
+            <p class="text-xs text-slate-500 max-w-sm mx-auto mt-1">Vui lòng tải lên hồ sơ ứng viên và thiết lập yêu cầu tuyển dụng để bắt đầu quá trình trích xuất và chấm điểm.</p>
+          </div>
+
+          <!-- Loading State -->
+          <div id="resultsLoadingState" class="hidden card p-12 text-center text-slate-600">
+            <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-blue-600 border-t-transparent mb-4"></div>
+            <h3 class="text-sm font-semibold text-slate-800" id="loadingStageText">Đang phân tích tài liệu...</h3>
+            <p class="text-xs text-slate-500 max-w-sm mx-auto mt-1" id="loadingSubText">Hệ thống đang thực hiện bóc tách thực thể và tính điểm so khớp kỹ năng.</p>
+          </div>
+
+          <!-- Evaluation Results Container -->
+          <div id="resultsDataContainer" class="hidden space-y-6">
+
+            <!-- Candidate Identity & Score Header -->
+            <div class="card p-5">
+              <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div>
+                  <div class="flex items-center space-x-2">
+                    <h2 class="text-xl font-bold text-slate-900" id="resCandidateName">Nguyễn Văn A</h2>
+                    <span id="resExtractionBadge" class="badge badge-info">PDF Fast-Path</span>
+                  </div>
+                  <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-600 mt-1">
+                    <span id="resEmail">email@example.com</span>
+                    <span>•</span>
+                    <span id="resPhone">0901234567</span>
+                    <span>•</span>
+                    <span id="resFileName" class="font-mono text-slate-500">cv_file.pdf</span>
+                  </div>
+                </div>
+
+                <div class="text-right flex items-center sm:block gap-3">
+                  <div class="text-xs font-semibold uppercase tracking-wider text-slate-500">Điểm Kỹ Năng</div>
+                  <div class="text-3xl font-extrabold text-blue-700 leading-none" id="resTotalScore">8.5<span class="text-base font-normal text-slate-400">/10</span></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Score Breakdown Grid (5 Boxes - No Semantic Fit) -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              <!-- 1. Kỹ năng chuyên môn (Thang điểm 10 + Đạt / Chưa đạt) -->
+              <div class="metric-box">
+                <div class="flex items-center justify-between">
+                  <span class="metric-label">Kỹ Năng Chuyên Môn</span>
+                  <span id="resBadgeSkills" class="badge badge-success text-xs font-semibold">Đạt</span>
+                </div>
+                <div class="metric-value text-blue-700" id="resScoreSkills">8.5<span class="text-xs font-normal text-slate-400">/10</span></div>
+                <div class="metric-sub" id="resSkillsDetails">Thang điểm 10 chuẩn tuyển dụng</div>
+              </div>
+
+              <!-- 2. Kinh nghiệm (Thực tế vs JD + Đạt / Chưa đạt) -->
+              <div class="metric-box">
+                <div class="flex items-center justify-between">
+                  <span class="metric-label">Kinh Nghiệm</span>
+                  <span id="resBadgeExp" class="badge badge-success text-xs font-semibold">Đạt</span>
+                </div>
+                <div class="metric-value text-slate-800 text-lg flex items-center h-9" id="resScoreExp">12 năm</div>
+                <div class="metric-sub" id="resExpDetails">Yêu cầu: 2.0 năm</div>
+              </div>
+
+              <!-- 3. Trình độ học vấn (Chỉ Đạt / Chưa đạt, không chấm điểm) -->
+              <div class="metric-box">
+                <div class="flex items-center justify-between">
+                  <span class="metric-label">Trình Độ Học Vấn</span>
+                  <span id="resBadgeEdu" class="badge badge-success text-xs font-semibold">Đạt</span>
+                </div>
+                <div class="metric-value text-slate-800 text-lg flex items-center h-9" id="resScoreEdu">Cử nhân / Kỹ sư</div>
+                <div class="metric-sub" id="resEduDetails">Bachelor vs Bachelor</div>
+              </div>
+
+              <!-- 4. Ngoại ngữ (Chỉ Đạt / Chưa đạt, không chấm điểm) -->
+              <div class="metric-box">
+                <div class="flex items-center justify-between">
+                  <span class="metric-label">Ngoại Ngữ</span>
+                  <span id="resBadgeLang" class="badge badge-success text-xs font-semibold">Đạt</span>
+                </div>
+                <div class="metric-value text-slate-800 text-lg flex items-center h-9" id="resScoreLang">Tiếng Anh</div>
+                <div class="metric-sub" id="resLangDetails">English (Yêu cầu: English)</div>
+              </div>
+
+              <!-- 5. Xếp loại tổng hợp -->
+              <div class="metric-box sm:col-span-2 lg:col-span-2">
+                <div class="flex items-center justify-between">
+                  <span class="metric-label">Xếp Loại Tổng Hợp</span>
+                  <span class="text-[11px] text-slate-500">Quy chuẩn thẩm định</span>
+                </div>
+                <div class="metric-value mt-1" id="resFitBadge">
+                  <span class="badge badge-success text-sm py-1 px-3">Đạt Yêu Cầu</span>
+                </div>
+                <div class="metric-sub" id="resOverallComment">Hồ sơ thỏa mãn các tiêu chuẩn kỹ năng và điều kiện tiên quyết.</div>
+              </div>
+            </div>
+
+            <!-- Visual Radar Chart & Detailed Skills -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <!-- Radar Chart -->
+              <div class="card">
+                <div class="card-header">
+                  Biểu Đồ Năng Lực (Radar Analysis)
+                </div>
+                <div class="card-body flex items-center justify-center p-3">
+                  <div class="w-full max-w-[280px] h-[250px]">
+                    <canvas id="scoreRadarChart"></canvas>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Matched Skills Badges -->
+              <div class="card">
+                <div class="card-header">
+                  Kỹ Năng Đối Chiếu Thành Công
+                </div>
+                <div class="card-body space-y-3 p-4">
+                  <div>
+                    <div class="text-[11px] font-semibold text-slate-500 uppercase mb-1">Ngôn ngữ lập trình</div>
+                    <div id="resSkillsLanguages" class="flex flex-wrap gap-1.5">
+                      <span class="text-xs text-slate-400">Không có dữ liệu</span>
+                    </div>
+                  </div>
+                  <div>
+                    <div class="text-[11px] font-semibold text-slate-500 uppercase mb-1">Frameworks & Thư viện</div>
+                    <div id="resSkillsFrameworks" class="flex flex-wrap gap-1.5">
+                      <span class="text-xs text-slate-400">Không có dữ liệu</span>
+                    </div>
+                  </div>
+                  <div>
+                    <div class="text-[11px] font-semibold text-slate-500 uppercase mb-1">Cơ sở dữ liệu & Công cụ</div>
+                    <div id="resSkillsDatabases" class="flex flex-wrap gap-1.5">
+                      <span class="text-xs text-slate-400">Không có dữ liệu</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Deep AI Technical Report -->
+            <div class="card">
+              <div class="card-header flex items-center justify-between">
+                <span>Báo Cáo Thẩm Định & Đề Xuất Phỏng Vấn Chuyên Sâu</span>
+                <button type="button" id="btnExportReport" class="btn-secondary text-xs py-1 px-2.5">Xuất Báo Cáo (.MD)</button>
+              </div>
+              <div class="card-body">
+                <div id="resAiReport" class="report-content bg-slate-50/50 p-4 rounded-md border border-slate-100">
+                  <!-- Rendered Markdown goes here -->
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================================================================== -->
+    <!-- TAB 2: BATCH EVALUATION LEADERBOARD -->
+    <!-- ===================================================================== -->
+    <section id="tab-batch" class="tab-pane hidden space-y-6">
+      <div class="card">
+        <div class="card-header flex items-center justify-between">
+          <span>Thiết lập Chấm điểm Hàng loạt (Batch Evaluation)</span>
+          <span class="text-xs font-normal text-slate-500">Đối chiếu danh sách ứng viên với cùng tiêu chuẩn JD</span>
+        </div>
+        <div class="card-body space-y-4">
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 mb-1">VỊ TRÍ TUYỂN DỤNG</label>
+              <input type="text" id="batchJdTitle" class="w-full text-sm px-3 py-2 border border-slate-300 rounded-md" value="Python Backend Developer">
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 mb-1">KINH NGHIỆM TỐI THIỂU</label>
+              <input type="number" id="batchJdExp" step="0.5" class="w-full text-sm px-3 py-2 border border-slate-300 rounded-md" value="2.0">
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 mb-1">SỐ LƯỢNG HỒ SƠ XỬ LÝ</label>
+              <select id="batchLimit" class="w-full text-sm px-3 py-2 border border-slate-300 rounded-md bg-white">
+                <option value="5">5 CV đầu tiên</option>
+                <option value="10" selected>10 CV đầu tiên</option>
+                <option value="20">20 CV đầu tiên</option>
+                <option value="40">40 CV</option>
+                <option value="80">Toàn bộ 80 hồ sơ mẫu</option>
+              </select>
+            </div>
+            <div class="flex items-end">
+              <button id="btnRunBatch" type="button" class="w-full btn-primary py-2 text-sm font-semibold">
+                Bắt đầu Chấm điểm Hàng loạt
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Batch Leaderboard Results Table -->
+      <div class="card">
+        <div class="card-header flex items-center justify-between">
+          <span>Bảng Xếp Hạng Ứng Viên (Leaderboard)</span>
+          <div class="flex items-center space-x-2">
+            <span id="batchCountBadge" class="text-xs text-slate-500">0 hồ sơ đã chấm</span>
+            <button id="btnExportBatchCsv" class="btn-secondary text-xs py-1 px-2.5">Xuất CSV</button>
+          </div>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th class="w-16 text-center">Hạng</th>
+                <th>Ứng Viên</th>
+                <th>Tên Tệp</th>
+                <th class="text-right">Điểm Kỹ Năng</th>
+                <th>Kỹ Năng (Thang 10)</th>
+                <th>Kinh Nghiệm (Thực tế vs JD)</th>
+                <th class="text-center">Học Vấn</th>
+                <th class="text-center">Ngoại Ngữ</th>
+                <th class="text-center">Đánh Giá</th>
+              </tr>
+            </thead>
+            <tbody id="batchTableBody">
+              <tr>
+                <td colspan="9" class="text-center py-8 text-slate-400 text-xs">Chưa có kết quả thẩm định hàng loạt. Nhấn nút "Bắt đầu Chấm điểm Hàng loạt" ở trên để chạy.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================================================================== -->
+    <!-- TAB 3: AUDIT HISTORY -->
+    <!-- ===================================================================== -->
+    <section id="tab-history" class="tab-pane hidden space-y-6">
+      <div class="card">
+        <div class="card-header flex items-center justify-between">
+          <span>Nhật ký Thẩm định Hồ sơ (Evaluation History)</span>
+          <div class="flex items-center space-x-2">
+            <button id="btnRefreshHistory" class="btn-secondary text-xs py-1 px-2.5">Làm mới</button>
+            <button id="btnClearHistory" class="btn-secondary text-xs py-1 px-2.5 text-red-600 hover:border-red-300">Xóa Lịch Sử</button>
+          </div>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th class="w-12 text-center">STT</th>
+                <th>Thời Gian Thẩm Định</th>
+                <th>Ứng Viên</th>
+                <th>Vị Trí Đã Ứng Tuyển</th>
+                <th class="text-right">Điểm Tổng</th>
+                <th>Kinh Nghiệm</th>
+                <th>Học Vấn</th>
+                <th class="text-center">Trạng Thái</th>
+              </tr>
+            </thead>
+            <tbody id="historyTableBody">
+              <tr>
+                <td colspan="8" class="text-center py-8 text-slate-400 text-xs">Đang tải dữ liệu nhật ký...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="bg-white border-t border-slate-200 mt-auto py-4">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 gap-2">
+      <div>TalentMatch Enterprise v2.0 • Bóc tách đa chế độ & Vector Search đa ngữ</div>
+      <div>Designed for Enterprise HR Operations • Bảo mật chuẩn cấp doanh nghiệp</div>
+    </div>
+  </footer>
+
+  <script src="/assets/js/app.js"></script>
+</body>
+</html>

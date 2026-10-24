@@ -1,0 +1,26 @@
+# --- Python & Environment ---
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+.DS_Store
+
+# --- AI Models (KHÔNG UP LÊN GIT) ---
+*.gguf
+*.bin
+models_cache/
+paddleocr/
+
+# --- Data & Temp Files ---
+data/
+temp/
+*.pdf
+*.png
+*.jpg
+*.jpeg
+*.docx
+
+# --- IDE settings ---
+.vscode/
+.idea/
