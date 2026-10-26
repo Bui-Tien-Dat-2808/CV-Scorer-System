@@ -9,11 +9,28 @@ from core.logger import logger
 
 load_dotenv()
 
+
+class LLMProviderError(RuntimeError):
+    """Lỗi của động cơ LLM. Ném để tầng service fallback, thay vì trả chuỗi lỗi thô về UI."""
+
+
+class GeminiNotConfiguredError(LLMProviderError):
+    pass
+
+
+class GeminiAPIError(LLMProviderError):
+    pass
+
+
+class LocalLLMError(LLMProviderError):
+    pass
+
+
 class GeminiProvider:
     """Client giao tiếp với Google Gemini API qua giao thức REST HTTP (không phụ thuộc SDK nặng)."""
     
     DEFAULT_MODEL = "gemini-2.5-flash"
-    FALLBACK_MODEL = "gemini-1.5-flash"
+    FALLBACK_MODEL = "gemini-2.0-flash"
 
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or os.getenv("GEMINI_API_KEY", "").strip()
@@ -24,11 +41,13 @@ class GeminiProvider:
     def generate(self, prompt: str, system_prompt: str = "", temperature: float = 0.4) -> str:
         """Gửi yêu cầu sinh văn bản tới Gemini API."""
         if not self.is_configured():
-            return "⚠️ Chưa cấu hình GEMINI_API_KEY. Vui lòng nhập API Key ở ô cấu hình hoặc trong file .env."
+            raise GeminiNotConfiguredError("Chưa cấu hình GEMINI_API_KEY.")
 
+        last_error = "không rõ nguyên nhân"
         for model_name in [self.DEFAULT_MODEL, self.FALLBACK_MODEL]:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={self.api_key}"
-            headers = {"Content-Type": "application/json"}
+            # API key đặt trong header x-goog-api-key để không lộ trong URL/log.
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
+            headers = {"Content-Type": "application/json", "x-goog-api-key": self.api_key}
             
             payload = {
                 "contents": [
@@ -57,12 +76,16 @@ class GeminiProvider:
                         parts = candidates[0]["content"].get("parts", [])
                         if parts:
                             return parts[0].get("text", "")
+                    last_error = f"{model_name} trả về nội dung rỗng"
+                else:
+                    last_error = f"{model_name} HTTP {response.status_code}"
                 
                 logger.warning(f"Gemini API ({model_name}) error code {response.status_code}: {response.text[:200]}")
             except Exception as e:
+                last_error = f"{model_name}: {e}"
                 logger.error(f"Lỗi kết nối Gemini API ({model_name}): {e}")
 
-        return "❌ Không thể kết nối tới Google Gemini API. Vui lòng kiểm tra lại API Key và kết nối mạng."
+        raise GeminiAPIError(f"Không thể lấy phản hồi từ Google Gemini API ({last_error}).")
 
     def generate_analysis(self, prompt: str, system_instruction: str = "", temperature: float = 0.4) -> str:
         return self.generate(prompt, system_prompt=system_instruction, temperature=temperature)
@@ -109,7 +132,7 @@ class LocalLLM:
     def generate_response(self, prompt: str, system_instruction: str = "") -> str:
         if not self.is_loaded():
             if not self.load_model():
-                return "❌ Không thể nạp Local LLM (llama-cpp-python hoặc trọng số GGUF bị thiếu)."
+                raise LocalLLMError("Không thể nạp Local LLM (thiếu llama-cpp-python hoặc trọng số GGUF).")
         
         try:
             messages = []
@@ -125,7 +148,7 @@ class LocalLLM:
             return output["choices"][0]["message"]["content"]
         except Exception as e:
             logger.error(f"Lỗi sinh văn bản qua Local LLM: {e}")
-            return f"❌ Lỗi suy luận Local LLM: {e}"
+            raise LocalLLMError(f"Lỗi suy luận Local LLM: {e}")
 
 
 class LLMFactory:

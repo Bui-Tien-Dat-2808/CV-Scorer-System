@@ -1,10 +1,23 @@
 # services/llm_service.py
 from typing import Dict, Any, Optional
 from core.logger import logger
-from models.llm_model import GeminiProvider, LocalLLM
+from models.llm_model import GeminiProvider, LocalLLM, LLMProviderError
 
 SYSTEM_PROMPT = """Bạn là một Chuyên gia Tuyển dụng Kỹ thuật Cấp cao (Lead Technical Recruiter) và Kiến trúc sư Hệ thống (Principal Engineer).
 Nhiệm vụ của bạn là phân tích sâu hồ sơ ứng viên (CV) đối chiếu với bản mô tả công việc (JD), đưa ra nhận xét chuyên môn sắc sảo, công tâm và xây dựng bộ câu hỏi phỏng vấn kỹ thuật cá nhân hóa cho ứng viên đó."""
+
+# Thông báo thân thiện gửi về UI: không chứa exception text hay chi tiết kỹ thuật thô.
+CLOUD_UNAVAILABLE_NOTICE = """### ⚠️ Báo cáo thẩm định AI tạm hoãn
+
+Hệ thống không sinh được nhận xét chuyên sâu: Google Gemini không khả dụng và động cơ Local LLM chưa được nạp sẵn.
+
+Điểm số và các tiêu chí đối chiếu ở trên vẫn hợp lệ. **Cách khắc phục:** kiểm tra lại `GEMINI_API_KEY` (ô cấu hình hoặc file `.env`), hoặc nạp mô hình On-Premise Local LLM rồi chọn lại động cơ."""
+
+LOCAL_UNAVAILABLE_NOTICE = """### ⚠️ Báo cáo thẩm định AI tạm hoãn
+
+Không thể nạp hoặc chạy mô hình Local LLM (thiếu thư viện `llama-cpp-python` hoặc trọng số GGUF).
+
+Điểm số và các tiêu chí đối chiếu ở trên vẫn hợp lệ. **Cách khắc phục:** cài `llama-cpp-python` và cho phép tải trọng số vào `models_cache/`, hoặc chuyển sang động cơ Google Gemini."""
 
 def build_evaluation_prompt(cv_data: Dict[str, Any], jd_parsed: Dict[str, Any], match_score: float, breakdown: Dict[str, str]) -> str:
     """Xây dựng Prompt chi tiết theo kỹ thuật Chain-of-Thought & Role Prompting."""
@@ -64,6 +77,7 @@ def build_evaluation_prompt(cv_data: Dict[str, Any], jd_parsed: Dict[str, Any], 
 - **Kinh nghiệm làm việc:** {breakdown.get('Experience', 'N/A')} (Nhận xét: {breakdown.get('Experience_Status', 'Chưa đạt')})
 - **Trình độ học vấn:** {breakdown.get('Education_Status', 'Chưa đạt')} ({breakdown.get('Education_Details', '')})
 - **Ngoại ngữ:** {breakdown.get('Languages_Status', 'Chưa đạt')} ({breakdown.get('Languages_Details', '')})
+- **Điểm tổng hợp đa tiêu chí (Thang điểm 10):** {breakdown.get('Total_Score', f'{match_score:.1f}')}/10 — {breakdown.get('Weights', 'Kỹ năng 60% · Kinh nghiệm 20% · Học vấn 10% · Ngoại ngữ 10%')}
 - **Xếp loại tổng hợp:** {breakdown.get('Overall', 'Chưa Đạt Yêu Cầu')}
 
 ---
@@ -107,22 +121,24 @@ def generate_ai_feedback(
             logger.info("Đang sinh báo cáo thẩm định qua Google Gemini API...")
             provider = GeminiProvider(api_key=api_key)
             return provider.generate_analysis(prompt, system_instruction=SYSTEM_PROMPT)
-        except Exception as e:
-            logger.error(f"Lỗi khi gọi Gemini Provider: {e}. Đang chuyển sang Local LLM fallback...")
-            # Fallback sang local nếu có lỗi
-            if local_llm_instance and local_llm_instance.is_loaded():
-                return local_llm_instance.generate_response(prompt, system_instruction=SYSTEM_PROMPT)
-            return f"**Không thể sinh nhận xét từ Cloud LLM:** {e}\n\nVui lòng kiểm tra lại API Key hoặc chọn động cơ On-Premise Local LLM."
+        except LLMProviderError as e:
+            # Gemini thất bại thật sự (thiếu key / API lỗi) -> fallback sang Local LLM đã nạp sẵn.
+            logger.warning(f"Gemini không khả dụng: {e}. Thử fallback sang Local LLM...")
+            local = local_llm_instance or LocalLLM.get_instance()
+            if local.is_loaded():
+                try:
+                    return local.generate_response(prompt, system_instruction=SYSTEM_PROMPT)
+                except LLMProviderError as local_error:
+                    logger.error(f"Local LLM fallback thất bại: {local_error}")
+            return CLOUD_UNAVAILABLE_NOTICE
 
     elif provider_type == "local":
-        if local_llm_instance is None:
-            local_llm_instance = LocalLLM.get_instance()
-        if not local_llm_instance.is_loaded():
-            loaded = local_llm_instance.load_model()
-            if not loaded:
-                return "Mô hình Local LLM chưa được tải hoặc không tìm thấy file trọng số trong thư mục models_cache/."
-        
-        logger.info("Đang sinh báo cáo thẩm định qua Local LLM (Qwen2.5-7B)...")
-        return local_llm_instance.generate_response(prompt, system_instruction=SYSTEM_PROMPT)
+        local = local_llm_instance or LocalLLM.get_instance()
+        try:
+            logger.info("Đang sinh báo cáo thẩm định qua Local LLM (Qwen2.5-7B)...")
+            return local.generate_response(prompt, system_instruction=SYSTEM_PROMPT)
+        except LLMProviderError as e:
+            logger.error(f"Local LLM không khả dụng: {e}")
+            return LOCAL_UNAVAILABLE_NOTICE
 
     return "Động cơ LLM không hợp lệ."
