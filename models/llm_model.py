@@ -24,9 +24,8 @@ class GeminiProvider:
     def generate(self, prompt: str, system_prompt: str = "", temperature: float = 0.4) -> str:
         """Gửi yêu cầu sinh văn bản tới Gemini API."""
         if not self.is_configured():
-            return "⚠️ Chưa cấu hình GEMINI_API_KEY. Vui lòng nhập API Key ở thanh bên hoặc trong file .env."
+            return "⚠️ Chưa cấu hình GEMINI_API_KEY. Vui lòng nhập API Key ở ô cấu hình hoặc trong file .env."
 
-        # Thử gọi model 2.5-flash trước, nếu lỗi fallback về 1.5-flash
         for model_name in [self.DEFAULT_MODEL, self.FALLBACK_MODEL]:
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={self.api_key}"
             headers = {"Content-Type": "application/json"}
@@ -65,31 +64,69 @@ class GeminiProvider:
 
         return "❌ Không thể kết nối tới Google Gemini API. Vui lòng kiểm tra lại API Key và kết nối mạng."
 
+    def generate_analysis(self, prompt: str, system_instruction: str = "", temperature: float = 0.4) -> str:
+        return self.generate(prompt, system_prompt=system_instruction, temperature=temperature)
+
+
 class LocalLLM:
     """Singleton quản lý mô hình Local GGUF (Qwen2.5-7B) chạy offline."""
     _instance = None
 
+    def __init__(self):
+        self._model = None
+
     @classmethod
     def get_instance(cls):
         if cls._instance is None:
-            try:
-                from llama_cpp import Llama
-                logger.info("Đang nạp Local LLM Qwen2.5-7B...")
-                model_path = hf_hub_download(repo_id=settings.LLM_REPO_ID, filename=settings.LLM_FILENAME)
-                cls._instance = Llama(
-                    model_path=model_path,
-                    n_ctx=4096,
-                    n_gpu_layers=-1,
-                    verbose=False
-                )
-                logger.info("Nạp Local LLM thành công.")
-            except ImportError:
-                logger.warning("Thư viện llama-cpp-python chưa được cài đặt.")
-                return None
-            except Exception as e:
-                logger.error(f"Lỗi nạp Local LLM: {e}")
-                return None
+            cls._instance = cls()
         return cls._instance
+
+    def is_loaded(self) -> bool:
+        return self._model is not None
+
+    def load_model(self) -> bool:
+        if self._model is not None:
+            return True
+        try:
+            from llama_cpp import Llama
+            logger.info("Đang nạp Local LLM Qwen2.5-7B...")
+            model_path = hf_hub_download(repo_id=settings.LLM_REPO_ID, filename=settings.LLM_FILENAME)
+            self._model = Llama(
+                model_path=model_path,
+                n_ctx=4096,
+                n_gpu_layers=-1,
+                verbose=False
+            )
+            logger.info("Nạp Local LLM thành công.")
+            return True
+        except ImportError:
+            logger.warning("Thư viện llama-cpp-python chưa được cài đặt.")
+            return False
+        except Exception as e:
+            logger.error(f"Lỗi nạp Local LLM: {e}")
+            return False
+
+    def generate_response(self, prompt: str, system_instruction: str = "") -> str:
+        if not self.is_loaded():
+            if not self.load_model():
+                return "❌ Không thể nạp Local LLM (llama-cpp-python hoặc trọng số GGUF bị thiếu)."
+        
+        try:
+            messages = []
+            if system_instruction:
+                messages.append({"role": "system", "content": system_instruction})
+            messages.append({"role": "user", "content": prompt})
+            
+            output = self._model.create_chat_completion(
+                messages=messages,
+                max_tokens=2048,
+                temperature=0.3
+            )
+            return output["choices"][0]["message"]["content"]
+        except Exception as e:
+            logger.error(f"Lỗi sinh văn bản qua Local LLM: {e}")
+            return f"❌ Lỗi suy luận Local LLM: {e}"
+
 
 class LLMFactory:
     """Factory Router hỗ trợ chuyển đổi linh hoạt giữa Gemini Cloud và Local Model."""

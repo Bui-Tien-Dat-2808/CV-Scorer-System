@@ -23,9 +23,12 @@ class OCRModel:
     @classmethod
     def get_instance(cls):
         if cls._instance is None:
-            cls._instance = PaddleOCR(
-                lang="en", 
-                use_angle_cls=True,
-                show_log=False
-            )
+            ocr_kwargs = {
+                "lang": "en", 
+                "use_angle_cls": True,
+            }
+            try:
+                cls._instance = PaddleOCR(**ocr_kwargs, show_log=False)
+            except (TypeError, ValueError):
+                cls._instance = PaddleOCR(**ocr_kwargs)
         return cls._instance

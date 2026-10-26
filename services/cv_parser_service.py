@@ -20,8 +20,15 @@ from schemas.models import CandidateProfile
 
 class CVParserService:
     def __init__(self):
-        self.ocr = OCRModel.get_instance()
+        self._ocr = None
         self._embedder = None
+
+    @property
+    def ocr(self):
+        """Lazy loading OCR Model chỉ khi gặp file scan/ảnh cần OCR."""
+        if self._ocr is None:
+            self._ocr = OCRModel.get_instance()
+        return self._ocr
 
     @property
     def embedder(self):

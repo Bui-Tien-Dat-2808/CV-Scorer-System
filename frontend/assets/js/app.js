@@ -16,6 +16,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initDropzone();
   initEngineSelector();
   initEvaluationHandlers();
+  initModalHandlers();
   initBatchHandlers();
   initHistoryHandlers();
   checkSystemHealth();
@@ -202,6 +203,60 @@ function initEvaluationHandlers() {
   }
 }
 
+function initModalHandlers() {
+  const modal = document.getElementById("reportModal");
+  const btnClose = document.getElementById("btnCloseReportModal");
+  const btnCloseBottom = document.getElementById("btnCloseReportModalBottom");
+
+  function openModal() {
+    if (!currentEvaluationData || !currentEvaluationData.ai_feedback) {
+      showAlert("Chưa có nội dung báo cáo. Vui lòng hoàn thành thẩm định hồ sơ trước.");
+      return;
+    }
+    const sub = document.getElementById("modalCandidateSub");
+    if (sub) {
+      const name = currentEvaluationData.candidate_name || "Ứng viên";
+      const title = document.getElementById("jdTitle") ? document.getElementById("jdTitle").value : "Vị trí tuyển dụng";
+      sub.textContent = `Ứng viên: ${name} • ${title}`;
+    }
+    if (modal) {
+      modal.classList.remove("hidden");
+      document.body.classList.add("overflow-hidden");
+    }
+  }
+
+  function closeModal() {
+    if (modal) {
+      modal.classList.add("hidden");
+      document.body.classList.remove("overflow-hidden");
+    }
+  }
+
+  // Use event delegation for open button (inside hidden container)
+  document.body.addEventListener("click", (e) => {
+    if (e.target && e.target.closest("#btnOpenReportModal")) {
+      openModal();
+    }
+  });
+
+  if (btnClose) btnClose.addEventListener("click", closeModal);
+  if (btnCloseBottom) btnCloseBottom.addEventListener("click", closeModal);
+
+  if (modal) {
+    modal.addEventListener("click", (e) => {
+      if (e.target === modal) {
+        closeModal();
+      }
+    });
+  }
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && modal && !modal.classList.contains("hidden")) {
+      closeModal();
+    }
+  });
+}
+
 async function handleEvaluationSubmit() {
   if (!selectedFile) {
     showAlert("Vui lòng tải lên hồ sơ ứng viên (CV) trước khi thẩm định.");
@@ -272,6 +327,9 @@ function setEvaluationLoading(isLoading) {
     btn.disabled = false;
     btnText.textContent = "Tiến hành Thẩm định Hồ sơ";
     loadingState.classList.add("hidden");
+    if (dataContainer.classList.contains("hidden")) {
+      emptyState.classList.remove("hidden");
+    }
   }
 }
 
@@ -281,20 +339,18 @@ function renderEvaluationResults(data) {
 
   // 1. Candidate Overview
   document.getElementById("resCandidateName").textContent = data.candidate_name || "Chưa xác định";
-  
-  const emails = Array.isArray(data.email) ? data.email.join(", ") : (data.email || "N/A");
-  document.getElementById("resEmail").textContent = emails || "N/A";
-  document.getElementById("resPhone").textContent = data.phone_number || "N/A";
-  document.getElementById("resFileName").textContent = data.file_name || "";
 
-  // Extraction Mode Badge
-  const extractionBadge = document.getElementById("resExtractionBadge");
-  if (data.extraction_mode === "fastpath_pdf") {
-    extractionBadge.className = "badge badge-info";
-    extractionBadge.textContent = "PDF Fast-Path (0.05s)";
-  } else {
-    extractionBadge.className = "badge badge-warning";
-    extractionBadge.textContent = "PP-OCRv4 Scanned";
+  const emails = Array.isArray(data.email) ? data.email.join(", ") : (data.email || "");
+  const emailEl = document.getElementById("resEmail");
+  const phoneSep = document.getElementById("resEmailSep");
+  const phoneEl = document.getElementById("resPhone");
+
+  emailEl.textContent = emails || "N/A";
+  phoneEl.textContent = data.phone_number || "N/A";
+
+  // Ẩn dấu phân cách nếu cả 2 đều rỗng
+  if (phoneSep) {
+    phoneSep.style.display = (emails || data.phone_number) ? "" : "none";
   }
 
   const bd = data.breakdown || {};
@@ -356,16 +412,53 @@ function renderEvaluationResults(data) {
   // 6. Render Radar Chart (4 Trục Năng lực - Zero Semantic Fit)
   renderRadarChart(bd);
 
-  // 7. Render Matched Skills Badges
-  renderSkillBadges(data.matched_skills || {});
+  // 7. Render Matched Skills Badges (fallback to detected_skills if no JD match)
+  const matchedSkills = data.matched_skills || {};
+  const detectedSkills = data.detected_skills || {};
+  const hasMatched = Object.values(matchedSkills).some(v => Array.isArray(v) && v.length > 0);
+  renderSkillBadges(hasMatched ? matchedSkills : detectedSkills, !hasMatched);
 
   // 8. Render Markdown Technical Report
   const reportContainer = document.getElementById("resAiReport");
-  if (data.ai_feedback && typeof marked !== "undefined") {
-    reportContainer.innerHTML = marked.parse(data.ai_feedback);
+  if (data.ai_feedback) {
+    const cleanedMd = cleanMarkdownForRender(data.ai_feedback);
+    if (typeof marked !== "undefined") {
+      try {
+        marked.setOptions({
+          breaks: true,
+          gfm: true,
+        });
+        reportContainer.innerHTML = marked.parse(cleanedMd);
+      } catch (e) {
+        reportContainer.innerHTML = `<div class="whitespace-pre-wrap break-words">${escapeHtml(cleanedMd)}</div>`;
+      }
+    } else {
+      reportContainer.innerHTML = `<div class="whitespace-pre-wrap break-words">${escapeHtml(cleanedMd)}</div>`;
+    }
   } else {
-    reportContainer.textContent = data.ai_feedback || "Không có báo cáo chi tiết.";
+    reportContainer.textContent = "Không có báo cáo chi tiết.";
   }
+}
+
+function cleanMarkdownForRender(rawMarkdown) {
+  if (!rawMarkdown) return "";
+  let text = String(rawMarkdown).trim();
+
+  // Strip wrapping markdown code fences ```markdown ... ```
+  if (text.startsWith("```")) {
+    text = text.replace(/^```[a-zA-Z]*\r?\n?/, "");
+  }
+  if (text.endsWith("```")) {
+    text = text.replace(/\r?\n?```$/, "");
+  }
+
+  // Strip leading 4 spaces if every non-empty line has them
+  const lines = text.split("\n");
+  if (lines.length > 0 && lines.every(l => l.startsWith("    ") || l.trim() === "")) {
+    text = lines.map(l => l.startsWith("    ") ? l.substring(4) : l).join("\n");
+  }
+
+  return text.trim();
 }
 
 function renderRadarChart(breakdown) {
@@ -454,10 +547,21 @@ function renderRadarChart(breakdown) {
   });
 }
 
-function renderSkillBadges(matchedSkills) {
+function renderSkillBadges(matchedSkills, isFallback) {
   const langContainer = document.getElementById("resSkillsLanguages");
   const fwContainer = document.getElementById("resSkillsFrameworks");
   const dbContainer = document.getElementById("resSkillsDatabases");
+
+  // Update card header label if showing detected (not JD-matched) skills
+  const cardHeader = langContainer && langContainer.closest(".card");
+  if (cardHeader) {
+    const headerEl = cardHeader.querySelector(".card-header");
+    if (headerEl) {
+      headerEl.textContent = isFallback
+        ? "Kỹ Năng Phát Hiện Trong CV"
+        : "Kỹ Năng Đối Chiếu Thành Công";
+    }
+  }
 
   function fillBadges(container, list) {
     if (!list || list.length === 0) {
@@ -465,13 +569,30 @@ function renderSkillBadges(matchedSkills) {
       return;
     }
     container.innerHTML = list
-      .map((item) => `<span class="badge badge-info">${item}</span>`)
+      .map((item) => `<span class="badge badge-info">${escapeHtml(String(item))}</span>`)
       .join("");
   }
 
-  fillBadges(langContainer, matchedSkills["programming_languages"]);
-  fillBadges(fwContainer, matchedSkills["frameworks"]);
-  fillBadges(dbContainer, matchedSkills["databases"]);
+  if (isFallback) {
+    // detected_skills structure: { Languages: [...], Frameworks: [...], Databases: [...], 'AI & Data': [...], 'DevOps & Cloud': [...] }
+    const langList = [
+      ...(matchedSkills["Languages"] || []),
+    ];
+    const fwList = [
+      ...(matchedSkills["Frameworks"] || []),
+      ...(matchedSkills["AI & Data"] || []),
+      ...(matchedSkills["DevOps & Cloud"] || []),
+    ];
+    const dbList = matchedSkills["Databases"] || [];
+    fillBadges(langContainer, langList);
+    fillBadges(fwContainer, fwList);
+    fillBadges(dbContainer, dbList);
+  } else {
+    // matched_skills structure: { programming_languages: [...], frameworks: [...], databases: [...] }
+    fillBadges(langContainer, matchedSkills["programming_languages"]);
+    fillBadges(fwContainer, matchedSkills["frameworks"]);
+    fillBadges(dbContainer, matchedSkills["databases"]);
+  }
 }
 
 // =============================================================================

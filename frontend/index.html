@@ -219,16 +219,13 @@
             <div class="card p-5">
               <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div>
-                  <div class="flex items-center space-x-2">
+                  <div>
                     <h2 class="text-xl font-bold text-slate-900" id="resCandidateName">Nguyễn Văn A</h2>
-                    <span id="resExtractionBadge" class="badge badge-info">PDF Fast-Path</span>
                   </div>
-                  <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-600 mt-1">
+                  <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-600 mt-1">
                     <span id="resEmail">email@example.com</span>
-                    <span>•</span>
+                    <span id="resEmailSep" class="text-slate-300">•</span>
                     <span id="resPhone">0901234567</span>
-                    <span>•</span>
-                    <span id="resFileName" class="font-mono text-slate-500">cv_file.pdf</span>
                   </div>
                 </div>
 
@@ -336,17 +333,25 @@
               </div>
             </div>
 
-            <!-- Deep AI Technical Report -->
-            <div class="card">
-              <div class="card-header flex items-center justify-between">
-                <span>Báo Cáo Thẩm Định & Đề Xuất Phỏng Vấn Chuyên Sâu</span>
-                <button type="button" id="btnExportReport" class="btn-secondary text-xs py-1 px-2.5">Xuất Báo Cáo (.MD)</button>
-              </div>
-              <div class="card-body">
-                <div id="resAiReport" class="report-content bg-slate-50/50 p-4 rounded-md border border-slate-100">
-                  <!-- Rendered Markdown goes here -->
+            <!-- Action Card: View Full AI Technical Report -->
+            <div class="card p-5 bg-gradient-to-r from-blue-50/70 via-slate-50 to-white border border-blue-200 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div class="flex items-center space-x-3.5">
+                <div class="w-10 h-10 rounded-lg bg-blue-700 text-white flex items-center justify-center flex-shrink-0 shadow-sm">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                  </svg>
+                </div>
+                <div>
+                  <div class="text-sm font-bold text-slate-900">Báo Cáo Thẩm Định & Đề Xuất Phỏng Vấn Chuyên Sâu</div>
+                  <div class="text-xs text-slate-500 mt-0.5">Bao gồm: Đánh giá tổng quan, Điểm mạnh, Lỗ hổng kỹ năng & Bộ câu hỏi phỏng vấn chuẩn hóa</div>
                 </div>
               </div>
+              <button type="button" id="btnOpenReportModal" class="btn-primary flex items-center space-x-2 text-xs py-2 px-4 shadow-sm font-semibold whitespace-nowrap">
+                <span>Xem Báo Cáo Chi Tiết</span>
+                <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
             </div>
 
           </div>
@@ -471,6 +476,55 @@
       <div>Designed for Enterprise HR Operations • Bảo mật chuẩn cấp doanh nghiệp</div>
     </div>
   </footer>
+
+  <!-- Modal Dialog: Deep AI Technical Report -->
+  <div id="reportModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm transition-opacity duration-200">
+    <div class="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden">
+      
+      <!-- Modal Header -->
+      <div class="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-slate-50/80">
+        <div class="flex items-center space-x-3">
+          <div class="w-8 h-8 rounded bg-blue-700 text-white flex items-center justify-center text-sm font-bold">
+            TM
+          </div>
+          <div>
+            <h3 class="text-base font-bold text-slate-900 leading-tight">Báo Cáo Thẩm Định Kỹ Thuật & Đề Xuất Phỏng Vấn</h3>
+            <div class="text-xs text-slate-500" id="modalCandidateSub">Ứng viên: Abigail Martin • Python Backend Developer</div>
+          </div>
+        </div>
+
+        <div class="flex items-center space-x-2">
+          <button type="button" id="btnExportReport" class="btn-secondary text-xs py-1.5 px-3 flex items-center space-x-1">
+            <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+            </svg>
+            <span>Xuất Báo Cáo (.MD)</span>
+          </button>
+          <button type="button" id="btnCloseReportModal" class="text-slate-400 hover:text-slate-700 p-1.5 rounded-lg hover:bg-slate-100 transition">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Modal Body (Scrollable with Word-Wrap) -->
+      <div class="flex-1 overflow-y-auto p-6 space-y-4">
+        <div id="resAiReport" class="report-content bg-slate-50/60 p-5 rounded-lg border border-slate-200/80 overflow-hidden break-words">
+          <!-- Rendered Markdown goes here -->
+        </div>
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="px-6 py-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500">
+        <div>Báo cáo được chuẩn hóa theo quy chuẩn thẩm định kỹ thuật doanh nghiệp.</div>
+        <button type="button" id="btnCloseReportModalBottom" class="btn-secondary text-xs py-1.5 px-4 font-medium">
+          Đóng Báo Cáo
+        </button>
+      </div>
+
+    </div>
+  </div>
 
   <script src="/assets/js/app.js"></script>
 </body>
