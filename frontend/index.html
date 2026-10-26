@@ -10,6 +10,7 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.9/dist/purify.min.js"></script>
   <link rel="stylesheet" href="/assets/css/styles.css">
   <script>
     tailwind.config = {
@@ -39,34 +40,36 @@
   <!-- Header -->
   <header class="app-header sticky top-0 z-50 bg-white border-b border-slate-200">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="flex items-center justify-between h-16">
-        <div class="flex items-center space-x-3">
-          <div class="w-8 h-8 rounded bg-blue-700 flex items-center justify-center text-white font-bold text-sm tracking-wider">
+      <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 py-2 lg:h-16 lg:flex-nowrap lg:py-0">
+        <div class="flex min-w-0 items-center space-x-3">
+          <div class="w-8 h-8 rounded bg-blue-700 flex items-center justify-center text-white font-bold text-sm tracking-wider flex-shrink-0">
             TM
           </div>
-          <div>
-            <div class="text-base font-semibold text-slate-900 leading-tight">TalentMatch Enterprise</div>
-            <div class="text-xs text-slate-500">Hệ thống Sàng lọc & Thẩm định Ứng viên Chuẩn hóa</div>
+          <div class="min-w-0">
+            <div class="text-sm sm:text-base font-semibold text-slate-900 leading-tight truncate">TalentMatch Enterprise</div>
+            <div class="hidden sm:block text-xs text-slate-500 truncate">Hệ thống Sàng lọc & Thẩm định Ứng viên Chuẩn hóa</div>
           </div>
         </div>
 
-        <!-- Navigation Tabs -->
-        <nav class="flex space-x-1" id="navTabs">
-          <button class="nav-tab active" data-tab="tab-single">
-            Thẩm định Hồ sơ
-          </button>
-          <button class="nav-tab" data-tab="tab-batch">
-            Xếp hạng Hàng loạt
-          </button>
-          <button class="nav-tab" data-tab="tab-history">
-            Nhật ký Đánh giá
-          </button>
-        </nav>
+        <div class="order-last flex w-full items-center gap-3 lg:order-none lg:w-auto lg:flex-1 lg:justify-end">
+          <!-- Navigation Tabs -->
+          <nav class="flex min-w-0 flex-1 space-x-1 overflow-x-auto lg:flex-none" id="navTabs">
+            <button class="nav-tab active" data-tab="tab-single">
+              Thẩm định Hồ sơ
+            </button>
+            <button class="nav-tab" data-tab="tab-batch">
+              Xếp hạng Hàng loạt
+            </button>
+            <button class="nav-tab" data-tab="tab-history">
+              Nhật ký Đánh giá
+            </button>
+          </nav>
 
-        <!-- System Status Indicator -->
-        <div class="flex items-center space-x-2 text-xs text-slate-600 bg-slate-100 px-3 py-1.5 rounded-md border border-slate-200">
-          <span class="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
-          <span class="font-medium" id="systemStatusText">Core Services Ready</span>
+          <!-- System Status Indicator -->
+          <div class="hidden md:flex items-center space-x-2 text-xs text-slate-600 bg-slate-100 px-3 py-1.5 rounded-md border border-slate-200 whitespace-nowrap">
+            <span class="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
+            <span class="font-medium" id="systemStatusText">Core Services Ready</span>
+          </div>
         </div>
       </div>
     </div>
@@ -230,8 +233,9 @@
                 </div>
 
                 <div class="text-right flex items-center sm:block gap-3">
-                  <div class="text-xs font-semibold uppercase tracking-wider text-slate-500">Điểm Kỹ Năng</div>
+                  <div class="text-xs font-semibold uppercase tracking-wider text-slate-500">Điểm Tổng Hợp</div>
                   <div class="text-3xl font-extrabold text-blue-700 leading-none" id="resTotalScore">8.5<span class="text-base font-normal text-slate-400">/10</span></div>
+                  <div class="text-[11px] text-slate-500 mt-1" id="resScoreMeta">Kỹ năng 60% · Kinh nghiệm 20% · Học vấn 10% · Ngoại ngữ 10%</div>
                 </div>
               </div>
             </div>
@@ -413,8 +417,7 @@
                 <th class="w-16 text-center">Hạng</th>
                 <th>Ứng Viên</th>
                 <th>Tên Tệp</th>
-                <th class="text-right">Điểm Kỹ Năng</th>
-                <th>Kỹ Năng (Thang 10)</th>
+                <th class="text-right">Điểm Tổng Hợp (Thang 10)</th>
                 <th>Kinh Nghiệm (Thực tế vs JD)</th>
                 <th class="text-center">Học Vấn</th>
                 <th class="text-center">Ngoại Ngữ</th>
@@ -423,7 +426,7 @@
             </thead>
             <tbody id="batchTableBody">
               <tr>
-                <td colspan="9" class="text-center py-8 text-slate-400 text-xs">Chưa có kết quả thẩm định hàng loạt. Nhấn nút "Bắt đầu Chấm điểm Hàng loạt" ở trên để chạy.</td>
+                <td colspan="8" class="text-center py-8 text-slate-400 text-xs">Chưa có kết quả thẩm định hàng loạt. Nhấn nút "Bắt đầu Chấm điểm Hàng loạt" ở trên để chạy.</td>
               </tr>
             </tbody>
           </table>

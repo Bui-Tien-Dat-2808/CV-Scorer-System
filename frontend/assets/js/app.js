@@ -354,11 +354,16 @@ function renderEvaluationResults(data) {
   }
 
   const bd = data.breakdown || {};
-  const skillScoreVal = bd["Skills_Score"] || data.total_score || 0;
+  const skillScoreVal = bd["Skills_Score"] || 0;
 
-  // Header Score (Điểm Kỹ năng Thang 10)
+  // Header Score: điểm tổng hợp đa tiêu chí (thang 10), kỹ năng là thành phần 60%
+  const compositeVal = bd["Total_Score"] || data.total_score || 0;
   const totalScoreEl = document.getElementById("resTotalScore");
-  totalScoreEl.innerHTML = `${skillScoreVal}<span class="text-base font-normal text-slate-400">/10</span>`;
+  totalScoreEl.innerHTML = `${compositeVal}<span class="text-base font-normal text-slate-400">/10</span>`;
+  const scoreMetaEl = document.getElementById("resScoreMeta");
+  if (scoreMetaEl) {
+    scoreMetaEl.textContent = bd["Weights"] || `Kỹ năng ${skillScoreVal}/10 trên thang 10`;
+  }
 
   // 1. Kỹ năng chuyên môn (Thang điểm 10 + Đạt/Chưa đạt)
   document.getElementById("resScoreSkills").innerHTML = `${skillScoreVal}<span class="text-xs font-normal text-slate-400">/10</span>`;
@@ -428,7 +433,11 @@ function renderEvaluationResults(data) {
           breaks: true,
           gfm: true,
         });
-        reportContainer.innerHTML = marked.parse(cleanedMd);
+        const rawHtml = marked.parse(cleanedMd);
+        // Nội dung báo cáo đến từ LLM/CV/JD nên phải sanitize trước khi gán innerHTML
+        reportContainer.innerHTML = typeof DOMPurify !== "undefined"
+          ? DOMPurify.sanitize(rawHtml)
+          : `<div class="whitespace-pre-wrap break-words">${escapeHtml(cleanedMd)}</div>`;
       } catch (e) {
         reportContainer.innerHTML = `<div class="whitespace-pre-wrap break-words">${escapeHtml(cleanedMd)}</div>`;
       }
@@ -464,6 +473,15 @@ function cleanMarkdownForRender(rawMarkdown) {
 function renderRadarChart(breakdown) {
   const ctx = document.getElementById("scoreRadarChart");
   if (!ctx) return;
+
+  // Chart.js có thể bị chặn bởi CDN/mạng công ty: không để lỗi này chặn phần báo cáo phía sau
+  if (typeof Chart === "undefined") {
+    const wrapper = ctx.parentElement;
+    if (wrapper) {
+      wrapper.innerHTML = `<div class="flex h-full items-center justify-center px-4 text-center text-xs text-slate-400">Không thể tải biểu đồ radar (thư viện Chart.js chưa sẵn sàng).</div>`;
+    }
+    return;
+  }
 
   // Tính tỷ lệ % cho 4 trục (Không còn Semantic Fit)
   const skillScore = parseFloat(breakdown["Skills_Score"] || breakdown["Skills"] || 0);
@@ -632,7 +650,7 @@ async function handleBatchEvaluation() {
   btnRun.textContent = "Đang xử lý hàng loạt...";
   tbody.innerHTML = `
     <tr>
-      <td colspan="9" class="text-center py-12 text-slate-500">
+      <td colspan="8" class="text-center py-12 text-slate-500">
         <div class="inline-block animate-spin rounded-full h-6 w-6 border-2 border-blue-600 border-t-transparent mb-2"></div>
         <div class="text-xs font-medium">Hệ thống đang bóc tách và xếp hạng ${limit} hồ sơ...</div>
       </td>
@@ -656,7 +674,7 @@ async function handleBatchEvaluation() {
     showAlert(err.message || "Lỗi xử lý hàng loạt.");
     tbody.innerHTML = `
       <tr>
-        <td colspan="9" class="text-center py-8 text-red-500 text-xs">Không thể hoàn thành xử lý. Vui lòng kiểm tra lại dịch vụ.</td>
+        <td colspan="8" class="text-center py-8 text-red-500 text-xs">Không thể hoàn thành xử lý. Vui lòng kiểm tra lại dịch vụ.</td>
       </tr>
     `;
   } finally {
@@ -672,7 +690,7 @@ function renderBatchTable(records) {
   badge.textContent = `${records.length} hồ sơ đã chấm`;
 
   if (!records || records.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="9" class="text-center py-6 text-slate-400 text-xs">Không có hồ sơ nào được ghi nhận.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="text-center py-6 text-slate-400 text-xs">Không có hồ sơ nào được ghi nhận.</td></tr>`;
     return;
   }
 
@@ -708,17 +726,19 @@ function renderBatchTable(records) {
         ? `<span class="text-emerald-700 font-semibold text-xs">${escapeHtml(r.experience_years)} (Đạt)</span>`
         : `<span class="text-red-600 text-xs">${escapeHtml(r.experience_years)} (Chưa đạt)</span>`;
 
-      const skillBadge = r.skills_status === "Đạt"
-        ? `<span class="text-blue-700 font-semibold text-xs">${escapeHtml(r.skills_score)} (Đạt)</span>`
-        : `<span class="text-slate-600 text-xs">${escapeHtml(r.skills_score)} (Chưa đạt)</span>`;
+      const totalText = `${(Number(r.total_score) || 0).toFixed(1)}/10`;
+      const skillScoreText = r.skills_score || "0/10";
+      const skillStatusClass = r.skills_status === "Đạt" ? "text-emerald-700" : "text-red-600";
 
       return `
       <tr>
         <td class="text-center">${rankBadge}</td>
         <td class="font-medium text-slate-900">${escapeHtml(r.candidate_name)}</td>
         <td class="font-mono text-xs text-slate-500">${escapeHtml(r.file_name)}</td>
-        <td class="text-right font-bold text-blue-700">${r.total_score}</td>
-        <td>${skillBadge}</td>
+        <td class="text-right">
+          <div class="font-bold text-blue-700">${escapeHtml(totalText)}</div>
+          <div class="text-[11px] ${skillStatusClass}">Kỹ năng ${escapeHtml(skillScoreText)} · ${escapeHtml(r.skills_status || "Chưa đạt")}</div>
+        </td>
         <td>${expBadge}</td>
         <td class="text-center">${eduBadge}</td>
         <td class="text-center">${langBadge}</td>
@@ -735,17 +755,20 @@ function exportBatchToCsv() {
     return;
   }
 
-  const headers = ["Rank", "Candidate Name", "File Name", "Skills Score", "Skills Status", "Experience", "Education Status", "Languages Status", "Status"];
+  const csvCell = (value) => `"${String(value ?? "").replace(/"/g, '""')}"`;
+  const headers = ["Rank", "Candidate Name", "File Name", "Total Score (10)", "Skills Score", "Skills Status", "Experience", "Experience Status", "Education Status", "Languages Status", "Overall Status"];
   const rows = currentBatchData.map((r) => [
     r.rank,
-    `"${r.candidate_name.replace(/"/g, '""')}"`,
-    `"${r.file_name}"`,
-    r.total_score,
-    `"${r.skills_status}"`,
-    `"${r.experience_years}"`,
-    `"${r.education}"`,
-    `"${r.languages}"`,
-    `"${r.status}"`,
+    csvCell(r.candidate_name),
+    csvCell(r.file_name),
+    csvCell((Number(r.total_score) || 0).toFixed(1)),
+    csvCell(r.skills_score || "0/10"),
+    csvCell(r.skills_status),
+    csvCell(r.experience_years),
+    csvCell(r.experience_status),
+    csvCell(r.education),
+    csvCell(r.languages),
+    csvCell(r.status),
   ]);
 
   const csvContent = "\uFEFF" + [headers.join(","), ...rows.map((e) => e.join(","))].join("\n");
@@ -814,13 +837,30 @@ async function loadHistoryData() {
 
     tbody.innerHTML = result.data
       .map((item, index) => {
-        const score = item.match_score || item.total_score || 0;
+        // total_score là điểm tổng hợp thang 10; bản ghi cũ lưu thang 100 nên quy về /10
+        const rawScore = item.total_score ?? item.skills_score ?? item.match_score ?? 0;
+        const numericScore = Number(rawScore);
+        const score = Number.isFinite(numericScore)
+          ? (numericScore > 10 ? numericScore / 10 : numericScore)
+          : 0;
+        const skillRaw = Number(item.skills_score);
+        const skillText = Number.isFinite(skillRaw)
+          ? (skillRaw > 10 ? (skillRaw / 10).toFixed(1) : skillRaw.toFixed(1))
+          : null;
+
+        const status = item.overall_status || (score >= 6 ? "Đạt Yêu Cầu" : "Chưa Đạt Yêu Cầu");
         let statusBadge = "";
-        if (score >= 6.0) {
+        if (status === "Đạt Yêu Cầu") {
           statusBadge = `<span class="badge badge-success">Đạt Yêu Cầu</span>`;
+        } else if (status === "Cân Nhắc Phỏng Vấn") {
+          statusBadge = `<span class="badge badge-warning">Cân Nhắc</span>`;
         } else {
           statusBadge = `<span class="badge badge-danger">Chưa Đạt</span>`;
         }
+
+        const expYears = Number(item.experience_years);
+        const expText = Number.isFinite(expYears) ? `${expYears.toLocaleString("vi-VN")} năm` : "N/A";
+        const eduText = item.education_level || item.education || "N/A";
 
         return `
         <tr>
@@ -828,9 +868,12 @@ async function loadHistoryData() {
           <td class="text-xs text-slate-500">${escapeHtml(item.timestamp || "N/A")}</td>
           <td class="font-medium text-slate-900">${escapeHtml(item.candidate_name || "Unknown")}</td>
           <td class="text-xs text-slate-700">${escapeHtml(item.job_title || "N/A")}</td>
-          <td class="text-right font-bold text-blue-700">${score}/10</td>
-          <td class="text-xs text-slate-700">${item.years_experience || 0} năm</td>
-          <td class="text-xs text-slate-700">${escapeHtml(item.education_level || "N/A")}</td>
+          <td class="text-right">
+            <div class="font-bold text-blue-700">${score.toFixed(1)}/10</div>
+            ${skillText ? `<div class="text-[11px] font-normal text-slate-500">Kỹ năng ${skillText}/10</div>` : ""}
+          </td>
+          <td class="text-xs text-slate-700">${expText}</td>
+          <td class="text-xs text-slate-700">${escapeHtml(eduText)}</td>
           <td class="text-center">${statusBadge}</td>
         </tr>
       `;
