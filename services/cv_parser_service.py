@@ -3,6 +3,7 @@ import re
 import cv2
 import numpy as np
 import fitz  # PyMuPDF
+from datetime import datetime
 from typing import Tuple, Optional, Dict, Any, List
 
 # --- Import Models & Utils ---
@@ -17,6 +18,38 @@ from core.constants import (
 )
 from core.logger import logger
 from schemas.models import CandidateProfile
+
+# Tên ngoại ngữ kèm biến thể tiếng Việt/tiếng Anh thường gặp trong CV
+LANGUAGE_SYNONYMS = {
+    'English': [r'\benglish\b', r'\btiếng\s*anh\b', r'\banh\s*ngữ\b', r'\banh\s*văn\b'],
+    'Japanese': [r'\bjapanese\b', r'\btiếng\s*nhật\b', r'\bnhật\s*ngữ\b'],
+    'Korean': [r'\bkorean\b', r'\btiếng\s*hàn\b', r'\bhàn\s*ngữ\b'],
+    'Chinese': [r'\bchinese\b', r'\bmandarin\b', r'\btiếng\s*trung\b', r'\btiếng\s*hoa\b', r'\btrung\s*ngữ\b'],
+    'French': [r'\bfrench\b', r'\btiếng\s*pháp\b', r'\bpháp\s*ngữ\b'],
+    'German': [r'\bgerman\b', r'\btiếng\s*đức\b', r'\bđức\s*ngữ\b'],
+    'Spanish': [r'\bspanish\b', r'\btiếng\s*tây\s*ban\s*nha\b'],
+    'Vietnamese': [r'\bvietnamese\b', r'\btiếng\s*việt\b'],
+}
+
+LANGUAGE_LEVEL_PATTERN = (
+    r'(IELTS\s*[\d.]{1,4}|TOEIC\s*\d{3,4}|TOEFL(?:\s*iBT)?\s*[\d.]{1,3}'
+    r'|JLPT\s*N?[1-5]|N[1-5]|HSK\s*[1-6]|TOPIK\s*[1-6]|DELF\s*[A-C][12]|Goethe[-\s]?[A-C][12]'
+    r'|Native|Fluent|Proficient|Advanced|Intermediate|Basic|Bản ngữ|Thành thạo|Khá|Trung bình)'
+)
+
+# Dòng chứa các từ khóa này thuộc khối học vấn: khoảng năm đi kèm là năm học, không phải năm đi làm.
+EDUCATION_LINE_KEYWORDS = (
+    'university', 'college', 'institute', 'school', 'gpa', 'degree', 'major',
+    'đại học', 'cao đẳng', 'trường', 'tốt nghiệp', 'cử nhân', 'kỹ sư', 'thạc sĩ',
+)
+
+# Nhận diện khoảng thời gian: "2021 - 2024", "2022/2025", "2020 đến nay", "2019 to present"
+YEAR_RANGE_PATTERN = re.compile(
+    r'\b(19\d{2}|20\d{2})\s*'
+    r'(?:[-–—~]|/|\bto\b|\btill\b|\buntil\b|\bđến\b|\btới\b)'
+    r'\s*(19\d{2}|20\d{2}|present|nay|now|hiện\s*tại|this\s*time)\b',
+    re.IGNORECASE,
+)
 
 class CVParserService:
     def __init__(self):
@@ -63,9 +96,17 @@ class CVParserService:
             try:
                 import docx
                 doc = docx.Document(file_path)
-                full_text = "\n".join([p.text for p in doc.paragraphs if p.text.strip()])
+                parts = [p.text for p in doc.paragraphs if p.text.strip()]
+                # Bàn trong CV (thông tin cá nhân, kỹ năng, kinh nghiệm) nằm ở table,
+                # python-docx không trả nó qua doc.paragraphs.
+                for table in doc.tables:
+                    for row in table.rows:
+                        cells = [cell.text.strip() for cell in row.cells if cell.text.strip()]
+                        if cells:
+                            parts.append(" | ".join(cells))
+                full_text = "\n".join(parts)
                 if full_text.strip():
-                    logger.info("⚡ Fast-path: Đã trích xuất văn bản từ DOCX.")
+                    logger.info("⚡ Fast-path: Đã trích xuất văn bản từ DOCX (cả paragraph và table).")
                     return clean_text(full_text), None, "digital_docx"
             except Exception as e:
                 logger.warning(f"Lỗi đọc file docx: {e}. Thử fallback.")
@@ -87,8 +128,9 @@ class CVParserService:
                 # Nếu file có trên 40 từ -> Đây là Digital PDF!
                 if word_count >= 40:
                     logger.info(f"⚡ Fast-path: Phát hiện Digital PDF ({word_count} từ). Bỏ qua OCR hoàn toàn!")
-                    clean_raw = clean_ocr_errors_smart(clean_text(digital_text))
-                    return clean_raw, None, "digital_pdf"
+                    # Văn bản số đã chính xác; clean_ocr_errors_smart chỉ dành cho OCR
+                    # và sẽ làm hỏng chuỗi hợp lệ (vd "Django4" -> "Djang04").
+                    return clean_text(digital_text), None, "digital_pdf"
 
                 logger.info(f"🔍 PDF dạng scan/ảnh (chỉ có {word_count} từ text số). Chuyển sang PaddleOCR...")
             except Exception as e:
@@ -238,57 +280,86 @@ class CVParserService:
         return None
 
     def _find_years_experience(self, text: str) -> float:
-        """Ước tính số năm kinh nghiệm dựa trên cả từ khóa lẫn khoảng thời gian làm việc."""
-        found_years = []
+        """Ước tính số năm kinh nghiệm từ từ khóa tường minh và các khoảng thời gian đi làm."""
+        keyword_years = []
 
-        # 1. Tìm cụm từ rõ ràng: ví dụ "3 years experience", "2 năm kinh nghiệm"
-        pattern = re.compile(r'(\d{1,2})\+?\s*(year|năm|nam|yr|tháng|month)s?\b', re.IGNORECASE)
+        # 1. Cụm từ rõ ràng: "3 years experience", "2 năm kinh nghiệm", "6 tháng".
+        #    Negative lookahead loại tuổi ("22 years old", "22 tuổi") khỏi bộ đếm.
+        pattern = re.compile(
+            r'(\d{1,2})(?:\.\d)?\+?\s*(year|năm|nam|yr|tháng|month)s?\b(?!\s*(?:old|tuổi|age))',
+            re.IGNORECASE,
+        )
         for match in pattern.finditer(text):
             num = float(match.group(1))
             unit = match.group(2).lower()
             if 'tháng' in unit or 'month' in unit:
-                found_years.append(round(num / 12.0, 1))
-            elif num <= 30:  # Tránh bắt nhầm tuổi (vd: 22 years old)
-                found_years.append(num)
+                keyword_years.append(round(num / 12.0, 1))
+            elif num <= 30:
+                keyword_years.append(num)
 
-        # 2. Phân tích khoảng năm làm việc (vd: 2020 - 2024 hoặc 2021 - Present)
-        year_ranges = re.findall(r'\b(201\d|202\d)\s*[-–—toàđến/]+\s*(201\d|202\d|present|nay|hiện tại)\b', text, re.IGNORECASE)
-        total_range_years = 0
-        current_year = 2026
-
-        for start_str, end_str in year_ranges:
-            try:
-                start = int(start_str)
-                if any(p in end_str.lower() for p in ['present', 'nay', 'hiện tại']):
+        # 2. Cộng dồn khoảng làm việc sau khi gộp đoạn chồng lấn, bỏ khối học vấn.
+        intervals = []
+        current_year = datetime.now().year
+        for line in text.splitlines():
+            if not line.strip():
+                continue
+            line_lower = line.lower()
+            if any(kw in line_lower for kw in EDUCATION_LINE_KEYWORDS):
+                continue
+            for m in YEAR_RANGE_PATTERN.finditer(line):
+                start = int(m.group(1))
+                end_token = m.group(2).lower()
+                if re.match(r'^(present|nay|now|this\s*time|hiện\s*tại)', end_token):
                     end = current_year
                 else:
-                    end = int(end_str)
-                diff = end - start
-                if 0 < diff <= 15:
-                    total_range_years = max(total_range_years, diff)
-            except Exception:
-                continue
+                    end = int(end_token)
+                if 0 < end - start <= 15:
+                    intervals.append((start, end))
 
-        if total_range_years > 0:
-            found_years.append(float(total_range_years))
+        merged_total = 0.0
+        if intervals:
+            intervals.sort()
+            cur_start, cur_end = intervals[0]
+            for start, end in intervals[1:]:
+                if start <= cur_end:
+                    cur_end = max(cur_end, end)
+                else:
+                    merged_total += cur_end - cur_start
+                    cur_start, cur_end = start, end
+            merged_total += cur_end - cur_start
 
-        return max(found_years) if found_years else 0.0
+        candidates = keyword_years + ([float(merged_total)] if merged_total > 0 else [])
+        return max(candidates) if candidates else 0.0
 
     def _extract_education_level(self, text: str) -> str:
-        """Nhận diện bằng cấp (ưu tiên keyword tiếng Anh/Việt trước, semantic fallback sau)."""
+        """Nhận diện bằng cấp, trả về bậc cao nhất xuất hiện trong CV."""
         text_lower = text.lower()
 
-        # Từ điển phân cấp bằng cấp trực tiếp
-        edu_keywords = {
-            'Phd': ['phd', 'doctorate', 'tiến sĩ'],
-            'Master': ['master', 'thạc sĩ', 'mba', 'm.sc', 'm.tech'],
-            'Bachelor': ['bachelor', 'cử nhân', 'kỹ sư', 'engineer', 'b.sc', 'b.tech', 'đại học', 'university'],
-            'Associate': ['associate', 'cao đẳng', 'college', 'vocational']
+        # Hỗ trợ viết tắt có/không dấu chấm (Ph.D., B.Sc., M.S.) và không dùng chức danh
+        # "engineer" làm bằng cấp để tránh nhầm "Software Engineer" thành Bachelor.
+        edu_patterns = {
+            'Phd': [
+                r'\bph\.?\s?d\.?\b', r'\bdoctorate\b',
+                r'\bdoctor\s+of\s+philosophy\b', r'\btiến\s*sĩ\b'
+            ],
+            'Master': [
+                r'\bmasters?(?:\'s)?\b', r'\bthạc\s*sĩ\b', r'\bmba\b',
+                r'\bm\.?\s?sc\.?\b', r'\bm\.?\s?tech\.?\b', r'\bm\.\s?s\.'
+            ],
+            'Bachelor': [
+                r'\bbachelors?(?:\'s)?\b', r'\bcử\s*nhân\b', r'\bkỹ\s*sư\b',
+                r'\bb\.?\s?sc\.?\b', r'\bb\.?\s?tech\.?\b', r'\bb\.\s?s\.',
+                r'\bđại\s*học\b', r'\buniversity\b'
+            ],
+            'Associate': [
+                r'\bassociate\b', r'\bcao\s*đẳng\b', r'\bvocational\b', r'\bcollege\b'
+            ]
         }
 
-        for level, keywords in edu_keywords.items():
-            for kw in keywords:
-                if re.search(r'\b' + re.escape(kw) + r'\b', text_lower):
+        # Duyệt từ bậc cao nhất xuống thấp nhất
+        for level, patterns in edu_patterns.items():
+            for pattern in patterns:
+                if re.search(pattern, text_lower):
                     return level
 
         # Fallback dùng Embedding nếu văn bản phức tạp
@@ -309,24 +380,69 @@ class CVParserService:
         return "None"
 
     def _extract_foreign_languages(self, text: str) -> List[str]:
-        """Phát hiện ngoại ngữ kèm chứng chỉ (IELTS, TOEIC, JLPT, HSK)."""
-        text_clean = text.replace('\n', '  ')
-        results = []
-        target_languages = ['English', 'Vietnamese', 'Japanese', 'Korean', 'Chinese', 'French', 'German']
+        """Phát hiện ngoại ngữ kèm chứng chỉ (IELTS, TOEIC, JLPT, HSK...) hoặc tên ngôn ngữ đứng riêng."""
+        if not text:
+            return []
 
-        for lang in target_languages:
-            lang_esc = re.escape(lang)
-            # Pattern tìm ngôn ngữ kèm chứng chỉ hoặc level gần kề
-            pattern = r'\b' + lang_esc + r'.{0,35}?\b(IELTS\s*[\d\.]+|TOEIC\s*\d+|N[1-5]|HSK\s*\d|Native|Fluent|Proficient|Intermediate|Basic|Advanced)\b'
-            match = re.search(pattern, text_clean, re.IGNORECASE)
+        results: Dict[str, str] = {}
+        has_lang_context = bool(re.search(
+            r'language|ngôn ngữ|ngoại ngữ|communication|certificate|chứng chỉ',
+            text, re.IGNORECASE
+        ))
+
+        for lang, patterns in LANGUAGE_SYNONYMS.items():
+            match = None
+            for pattern in patterns:
+                match = re.search(pattern, text, re.IGNORECASE)
+                if match:
+                    break
+            if not match:
+                continue
+
+            # 1) Chứng chỉ / mức độ nằm ngay sau tên ngôn ngữ
+            tail = text[match.end(): match.end() + 45]
+            cert = re.search(r'\b' + LANGUAGE_LEVEL_PATTERN + r'\b', tail, re.IGNORECASE)
+            if cert:
+                results[lang] = f"{lang} ({self._format_language_level(cert.group(1))})"
+                continue
+
+            # 2) Tên ngôn ngữ đứng riêng trong dòng ngắn (mục kỹ năng) hoặc có ngữ cảnh ngoại ngữ
+            line_start = text.rfind('\n', 0, match.start()) + 1
+            line_end = text.find('\n', match.end())
+            if line_end == -1:
+                line_end = len(text)
+            line = text[line_start:line_end].strip()
+
+            if has_lang_context or (len(line) <= 60 and len(line.split()) <= 8):
+                results[lang] = lang
+
+        # 3) Chứng chỉ đứng một mình vẫn suy ra được ngôn ngữ tương ứng
+        cert_to_lang = [
+            (r'IELTS\s*[\d.]{1,4}|TOEIC\s*\d{3,4}|TOEFL(?:\s*iBT)?\s*[\d.]{1,3}', 'English'),
+            (r'JLPT\s*N?[1-5]', 'Japanese'),
+            (r'HSK\s*[1-6]', 'Chinese'),
+            (r'TOPIK\s*[1-6]', 'Korean'),
+            (r'DELF\s*[A-C][12]', 'French'),
+            (r'Goethe[-\s]?[A-C][12]', 'German'),
+        ]
+        for pattern, lang in cert_to_lang:
+            if lang in results:
+                continue
+            match = re.search(r'\b(?:' + pattern + r')\b', text, re.IGNORECASE)
             if match:
-                results.append(f"{lang} ({match.group(1).title()})")
-            elif re.search(r'\b' + lang_esc + r'\b', text_clean, re.IGNORECASE):
-                # Bắt tên ngôn ngữ nếu xuất hiện trong ngữ cảnh học tập / kỹ năng
-                if any(w in text_clean.lower() for w in ['language', 'ngôn ngữ', 'ngoại ngữ', 'communication']):
-                    results.append(lang)
+                results[lang] = f"{lang} ({self._format_language_level(match.group(0))})"
 
-        return list(set(results))
+        return sorted(results.values(), key=lambda value: value.lower())
+
+    @staticmethod
+    def _format_language_level(raw: str) -> str:
+        """Giữ nguyên viết hoa của tên chứng chỉ (IELTS, TOEIC...) thay vì .title() làm sai."""
+        text = raw.strip()
+        acronym = re.match(r'(ielts|toeic|toefl|jlpt|hsk|topik|delf|goethe)', text, re.IGNORECASE)
+        if acronym:
+            token = acronym.group(0)
+            return token.upper() + text[len(token):]
+        return text.title()
 
     def _extract_all_skills_passive(self, text: str) -> Dict[str, List[str]]:
         """Quét toàn bộ kỹ năng kỹ thuật có trong CV kèm tra cứu từ đồng nghĩa (Aliases)."""
