@@ -5,6 +5,9 @@ from core.constants import SKILL_LEVEL_MAPPING, EDUCATION_RANKING, SKILL_ALIASES
 from core.logger import logger
 from utils.text_cleaner import clean_text
 
+# Tỷ trọng từng tiêu chí khi quy ra điểm tổng hợp thang 10.
+SCORING_WEIGHTS = {'skills': 0.6, 'experience': 0.2, 'education': 0.1, 'languages': 0.1}
+
 class ScoringService:
     def __init__(self):
         pass
@@ -92,6 +95,7 @@ class ScoringService:
         - 3. Trình độ học vấn: Chỉ đánh giá Đạt / Chưa đạt (không chấm điểm số).
         - 4. Ngoại ngữ: Chỉ đánh giá Đạt / Chưa đạt (không chấm điểm số).
         - 5. Loại bỏ hoàn toàn Semantic Fit.
+        - Tổng điểm thang 10 = 60% kỹ năng + 20% kinh nghiệm + 10% học vấn + 10% ngoại ngữ.
         """
         breakdown = {}
 
@@ -131,6 +135,7 @@ class ScoringService:
         cand_exp = float(cv_data.get('years_experience', 0) or 0)
 
         exp_status = "Đạt" if (cand_exp >= req_exp) else "Chưa đạt"
+        exp_ratio = 1.0 if req_exp <= 0 else min(cand_exp / req_exp, 1.0)
 
         breakdown['Experience'] = f"{cand_exp:g} năm (Yêu cầu: {req_exp:g} năm)"
         breakdown['Experience_Cand'] = f"{cand_exp:g} năm"
@@ -146,9 +151,13 @@ class ScoringService:
         found_rank = self.get_education_rank(found_edu_str)
 
         if req_rank == 0:
-            edu_status = "Đạt"
+            edu_status, edu_ratio = "Đạt", 1.0
+        elif found_rank >= req_rank:
+            edu_status, edu_ratio = "Đạt", 1.0
         else:
-            edu_status = "Đạt" if found_rank >= req_rank else "Chưa đạt"
+            # Có bằng cấp nhưng thấp hơn yêu cầu: cho 50% điểm, chưa đáp ứng thì 0%.
+            edu_status = "Chưa đạt"
+            edu_ratio = 0.5 if found_rank > 0 else 0.0
 
         breakdown['Education_Status'] = edu_status
         breakdown['Education_Details'] = f"{found_edu_str} vs {req_edu_str}"
@@ -169,12 +178,14 @@ class ScoringService:
 
         if not req_langs:
             lang_status = "Đạt"
+            lang_ratio = 1.0
         else:
             match_count = 0
             for req in req_langs:
                 req_lower = req.strip().lower()
                 if any(req_lower in d or d in req_lower for d in detected_names):
                     match_count += 1
+            lang_ratio = match_count / len(req_langs)
             lang_status = "Đạt" if match_count >= len(req_langs) else "Chưa đạt"
 
         cand_lang_str = ", ".join(cv_data.get('lang_extracted', [])) if cv_data.get('lang_extracted') else "Chưa ghi nhận"
@@ -196,15 +207,24 @@ class ScoringService:
 
         breakdown['Overall'] = overall
 
-        # Tổng điểm chính là điểm Kỹ năng theo thang điểm 10
-        total_score = tech_score_10
+        # Tổng điểm thang 10 phản ánh cả 4 tiêu chí, không chỉ riêng kỹ năng.
+        skills_ratio = tech_score_10 / 10.0
+        total_score = round(
+            10.0 * (
+                SCORING_WEIGHTS['skills'] * skills_ratio
+                + SCORING_WEIGHTS['experience'] * exp_ratio
+                + SCORING_WEIGHTS['education'] * edu_ratio
+                + SCORING_WEIGHTS['languages'] * lang_ratio
+            ),
+            1,
+        )
+        total_score = min(max(total_score, 0.0), 10.0)
 
-        return total_score, breakdown
-
-        breakdown['Overall'] = overall
-
-        # Tổng điểm chính là điểm Kỹ năng theo thang điểm 10
-        total_score = tech_score_10
+        breakdown['Total_Score'] = f"{total_score:.1f}"
+        breakdown['Weights'] = (
+            f"Kỹ năng {SCORING_WEIGHTS['skills']:.0%} · Kinh nghiệm {SCORING_WEIGHTS['experience']:.0%} · "
+            f"Học vấn {SCORING_WEIGHTS['education']:.0%} · Ngoại ngữ {SCORING_WEIGHTS['languages']:.0%}"
+        )
 
         return total_score, breakdown
 
