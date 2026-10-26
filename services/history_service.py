@@ -1,7 +1,8 @@
 import os
 import json
+import uuid
 from datetime import datetime
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from core.config import settings
 
 class HistoryService:
@@ -28,7 +29,8 @@ class HistoryService:
             print(f"Error loading history: {e}")
             return []
 
-    def save_record(self, cv_data: Dict, match_score: float, job_title: str):
+    def save_record(self, cv_data: Dict, match_score: float, job_title: str,
+                    breakdown: Optional[Dict[str, str]] = None):
         """Lưu một bản ghi đánh giá mới"""
         # Trích xuất danh sách tên kỹ năng thực tế thay vì tên categories
         skills_list = []
@@ -41,14 +43,18 @@ class HistoryService:
                 if isinstance(cat_skills, dict):
                     skills_list.extend(cat_skills.keys())
 
+        breakdown = breakdown or {}
+
         record = {
-            "id": int(datetime.now().timestamp()),
+            "id": uuid.uuid4().hex,
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "candidate_name": cv_data.get("full_name", "Unknown"),
             "email": cv_data.get("email", []),
             "job_title": job_title,
             "total_score": match_score,
-            "education": cv_data.get("education_level", "N/A"),
+            "skills_score": breakdown.get("Skills_Score", f"{match_score:.1f}"),
+            "overall_status": breakdown.get("Overall", ""),
+            "education_level": cv_data.get("education_level", "N/A"),
             "experience_years": cv_data.get("years_experience", 0),
             "summary_skills": skills_list[:5]
         }
