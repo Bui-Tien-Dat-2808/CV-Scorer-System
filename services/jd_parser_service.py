@@ -1,7 +1,10 @@
 # services/jd_parser_service.py
 import re
 from typing import Dict, List, Any
-from core.constants import SKILL_LEVEL_MAPPING, SKILL_ALIASES
+from core.constants import (
+    SKILL_LEVEL_MAPPING, SKILL_ALIASES,
+    LANGUAGES, FRAMEWORKS, DATABASES, AI_ML_SKILLS, DEVOPS_TOOLS
+)
 from schemas.models import JDRequirements
 
 def _parse_skill_list_to_dict(skill_list: List[str]) -> Dict[str, int]:
@@ -38,6 +41,41 @@ def _parse_skill_list_to_dict(skill_list: List[str]) -> Dict[str, int]:
         result[canonical_name] = level_score
 
     return result
+
+def categorize_skills(raw_skills: List[str]) -> Dict[str, List[str]]:
+    """
+    Phân loại danh sách kỹ năng người dùng nhập vào đúng nhóm JD:
+    programming_languages, frameworks, databases.
+    Công cụ DevOps/AI được xếp vào nhóm databases (cột "Cơ sở dữ liệu & Công cụ" trên UI).
+    """
+    buckets: Dict[str, List[str]] = {
+        "programming_languages": [],
+        "frameworks": [],
+        "databases": [],
+    }
+
+    for item in raw_skills:
+        if not isinstance(item, str):
+            continue
+
+        skill_name = re.sub(r'\s*\(.*?\)', '', item).strip()
+        if not skill_name:
+            continue
+
+        key = SKILL_ALIASES.get(skill_name.lower(), skill_name.lower())
+
+        if key in DATABASES:
+            buckets["databases"].append(item.strip())
+        elif key in LANGUAGES:
+            buckets["programming_languages"].append(item.strip())
+        elif key in FRAMEWORKS or key in AI_ML_SKILLS:
+            buckets["frameworks"].append(item.strip())
+        elif key in DEVOPS_TOOLS:
+            buckets["databases"].append(item.strip())
+        else:
+            buckets["frameworks"].append(item.strip())
+
+    return buckets
 
 def parse_jd_input(jd_raw_data: Dict[str, Any]) -> Dict[str, Any]:
     """

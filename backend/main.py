@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 
 from core.logger import logger
 from services.cv_parser_service import CVParserService
-from services.jd_parser_service import parse_jd_input
+from services.jd_parser_service import parse_jd_input, categorize_skills
 from services.scoring_service import ScoringService
 from services.history_service import HistoryService
 from services.llm_service import generate_ai_feedback
@@ -137,8 +137,8 @@ async def evaluate_single_cv(
             "job_title": job_title,
             "required_experience_years": required_experience_years,
             "education_level": education_level,
-            "programming_languages": [x.strip() for x in tech_skills.split(",") if x.strip()],
-            "foreign_languages": raw_langs
+            "foreign_languages": raw_langs,
+            **categorize_skills(tech_skills.split(","))
         })
 
         skill_results = {}
@@ -179,7 +179,7 @@ async def evaluate_single_cv(
         )
 
         # 8. Lưu lịch sử
-        history_service.save_record(cv_data_full, score, jd_parsed["job_title"])
+        history_service.save_record(cv_data_full, score, jd_parsed["job_title"], breakdown)
 
         # 9. Trả về kết quả sạch, không chứa path nhạy cảm
         return {
@@ -226,8 +226,8 @@ async def batch_evaluate_cvs(
         "job_title": job_title,
         "required_experience_years": required_experience_years,
         "education_level": education_level,
-        "programming_languages": [x.strip() for x in tech_skills.split(",") if x.strip()],
-        "foreign_languages": raw_langs
+        "foreign_languages": raw_langs,
+        **categorize_skills(tech_skills.split(","))
     })
 
     target_files = []
