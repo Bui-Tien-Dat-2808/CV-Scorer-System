@@ -11,6 +11,10 @@ services:
       - PYTHONUNBUFFERED=1
       - PYTHONPATH=/app
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      # Hai biến dưới đây để trống mặc định: không bật CORS, mở endpoint xoá lịch sử.
+      # Đặt giá trị trong .env trước khi chạy container trên mạng chia sẻ.
+      - APP_ADMIN_TOKEN=${APP_ADMIN_TOKEN:-}
+      - CORS_ALLOW_ORIGINS=${CORS_ALLOW_ORIGINS:-}
     volumes:
       # Volume 1: Dữ liệu CV mẫu và Lịch sử chấm điểm (Persistent Data)
       - ./data:/app/data

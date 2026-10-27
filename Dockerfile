@@ -23,8 +23,11 @@ WORKDIR /app
 # Copy requirements.txt trước để tận dụng Docker layer cache
 COPY requirements.txt .
 
-# Cài đặt Python packages
+# Cài đặt Python packages.
+# torch được lấy từ chỉ mục CPU: wheel mặc định trên PyPI kèm CUDA (~5GB) trong khi
+# container này chỉ chạy suy luận CPU. `==2.9.1` vẫn khớp bản `2.9.1+cpu`.
 RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch==2.9.1 && \
     pip install --no-cache-dir -r requirements.txt
 
 # Copy mã nguồn backend, frontend và core services vào container
@@ -35,6 +38,8 @@ COPY services/ services/
 COPY utils/ utils/
 COPY backend/ backend/
 COPY frontend/ frontend/
+# Sao chép test để `docker compose exec cv-scorer pytest` chạy được trong container
+COPY tests/ tests/
 
 # Tạo các thư mục dữ liệu và cache mặc định
 RUN mkdir -p /app/data /app/data/sample_cvs /root/.cache /root/.paddleocr

@@ -1,209 +1,247 @@
 <div align="center">
 
-# TalentMatch Enterprise | AI-Powered Resume Scoring System
-### Enterprise-Grade Candidate Screening, Dense Vector Matching & Technical Interview Kit
+# TalentMatch Enterprise | Hệ thống Thẩm định Hồ sơ & Chuẩn hóa Tuyển dụng
 
 [![Python 3.11](https://img.shields.io/badge/Python-3.11-3776AB?style=flat&logo=python&logoColor=white)](https://www.python.org/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688?style=flat&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
-[![Docker](https://img.shields.io/badge/Docker-Enabled-2496ED?style=flat&logo=docker&logoColor=white)](https://www.docker.com/)
-[![PyTorch](https://img.shields.io/badge/PyTorch-2.x-EE4C2C?style=flat&logo=pytorch&logoColor=white)](https://pytorch.org/)
-[![PaddleOCR](https://img.shields.io/badge/OCR-PP--OCRv4-00599C?style=flat)](https://github.com/PaddlePaddle/PaddleOCR)
-[![Google Gemini](https://img.shields.io/badge/LLM-Gemini%202.5%20Flash-4285F4?style=flat&logo=google&logoColor=white)](https://aistudio.google.com/)
-[![Tests](https://img.shields.io/badge/Tests-17%2F17%20Passed-brightgreen?style=flat&logo=pytest&logoColor=white)](https://pytest.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.111+-009688?style=flat&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=flat&logo=docker&logoColor=white)](https://www.docker.com/)
+[![PaddleOCR](https://img.shields.io/badge/OCR-PaddleOCR%202.7-00599C?style=flat)](https://github.com/PaddlePaddle/PaddleOCR)
+[![Tests](https://img.shields.io/badge/pytest-36%2F36%20Passed-brightgreen?style=flat&logo=pytest&logoColor=white)](https://pytest.org/)
 
-Hệ thống đánh giá hồ sơ ứng viên và đối chiếu tiêu chuẩn tuyển dụng (JD) chuẩn cấp doanh nghiệp, kết hợp giữa **Computer Vision**, **Dense Vector Semantic Search (RAG)** và **Generative AI**.
+Trích xuất hồ sơ từ PDF digital, PDF scan và DOCX → chấm điểm theo 4 tiêu chí có trọng số → sinh báo cáo phân tích bằng LLM, chạy hoàn toàn trên máy cục bộ.
 
 </div>
 
 ---
 
-## 🌟 Điểm nổi bật về Kỹ thuật (Technical Highlights)
+## 1. Bài toán và phạm vi
 
-Dự án được thiết kế và triển khai theo chuẩn **AI Engineer Production**:
+Tự động hoá bước sàng lọc đầu tiên của quy trình tuyển dụng kỹ thuật: từ một Job Description và một file CV, hệ thống trả về
 
-1. **Giao diện Doanh nghiệp Chuyên nghiệp (Corporate HR SaaS UI):**
-   - Thiết kế theo phong cách tối giản, chuẩn xác của các nền tảng tuyển dụng hàng đầu (Ashby, Greenhouse, Workday).
-   - Tuyệt đối không lạm dụng icon vô nghĩa hay các hiệu ứng lòe loẹt.
-   - **Bảo mật cấp cao:** Toàn bộ stack traces, đường dẫn nội bộ máy chủ (`D:\...`), system prompt và API key đều được che giấu hoặc đóng gói an toàn.
-   - Tích hợp biểu đồ mạng nhện đa giác năng lực (Chart.js Radar Analysis), đối chiếu điểm năng lực của ứng viên với tiêu chuẩn 100%.
+- điểm tổng hợp thang **10** cùng breakdown từng tiêu chí,
+- báo cáo Markdown giải thích *tại sao* đạt / không đạt và khoảng trống kỹ năng,
+- bộ câu hỏi phỏng vấn kỹ thuật cá nhân hoá theo lỗ hổng phát hiện được,
+- nhật ký đánh giá để tra lại về sau.
 
-2. **Kiến trúc RESTful API Độc lập (FastAPI Backend):**
-   - Tách biệt hoàn toàn Frontend & Backend theo chuẩn hiện đại.
-   - Các API endpoints chuyên biệt: `/api/v1/evaluate` (thẩm định đơn lẻ), `/api/v1/batch-evaluate` (xếp hạng hàng loạt), `/api/v1/history` (nhật ký đánh giá), `/api/v1/health` (giám sát trạng thái cụm AI).
-
-3. **Hybrid Ingestion Pipeline (Tốc độ tăng 30x):**
-   - **Fast-path Engine:** Sử dụng `PyMuPDF` (`fitz`) để trích xuất trực tiếp Digital PDF chỉ trong **< 0.05 giây** (bỏ qua OCR nếu có text layer số).
-   - **OCR Fallback Engine:** Tự động kích hoạt `PaddleOCR` (PP-OCRv4) với thuật toán phân tích bố cục cột (Layout Analysis) khi gặp CV dạng scan hoặc ảnh.
-   - **Zero-Poppler Dependency:** Hoạt động hoàn toàn độc lập, không cần cài đặt các binary Poppler bên ngoài trên cả Windows và Linux.
-
-4. **Semantic Vector Matching (Dense Retrieval):**
-   - Vượt xa các thuật toán Regex từ khóa truyền thống: Tích hợp mô hình `intfloat/multilingual-e5-base` để tính toán **Cosine Similarity** giữa các đoạn văn bản mô tả kinh nghiệm/dự án của ứng viên và yêu cầu trong JD.
-   - Hỗ trợ chuẩn hóa từ đồng nghĩa công nghệ (Skill Aliases: `k8s` $\rightarrow$ `Kubernetes`, `postgres` $\rightarrow$ `PostgreSQL`, `js` $\rightarrow$ `JavaScript`).
-
-5. **Dual LLM Provider & AI Technical Interview Kit:**
-   - **Google Gemini 2.5 Flash:** Giao thức REST API siêu nhẹ (1.5s/request, 0% tải GPU/RAM, hoàn toàn miễn phí).
-   - **Local LLM (Qwen2.5-7B GGUF):** Hỗ trợ chạy offline hoàn toàn khi có nhu cầu bảo mật dữ liệu nội bộ.
-   - **AI Interviewer:** Tự động phát hiện lỗ hổng kỹ năng của ứng viên để sinh **3 - 5 câu hỏi phỏng vấn kỹ thuật cá nhân hóa kèm tiêu chí đánh giá** cho người phỏng vấn.
-
-6. **MLOps & Containerization:**
-   - Đóng gói trọn gói bằng `Dockerfile` & `docker-compose.yml` với **3 lớp Docker Volumes** (Persistent Data, Live-Reload Code, 5GB+ Model Cache).
-   - Đạt độ bao phủ kiểm thử tự động **17/17 test case Passed** với `pytest`.
+Hệ thống phục vụ mục đích học tập và portfolio; **không** phải công cụ tuân thủ (compliance) cho HR production.
 
 ---
 
-## 🏗️ Kiến trúc Hệ thống (System Architecture)
+## 2. Kiến trúc
 
 ```mermaid
 flowchart TD
-    subgraph Client["Presentation Layer (Client)"]
-        WebUI["Enterprise Web Application (HTML5 / Tailwind / Chart.js)"]
-        StreamlitUI["Legacy Streamlit Dashboard"]
+    subgraph Client["Presentation"]
+        WebUI["Web UI tĩnh<br/>HTML + Tailwind build + Chart.js"]
     end
 
-    subgraph BackendAPI["API & Service Layer (FastAPI)"]
-        Router["FastAPI Application (Port 8000)"]
-        SecurityMW["Security Middleware & Exception Sanitizer"]
+    subgraph API["API Layer — FastAPI (port 8000)"]
+        EP["/api/v1/evaluate · /batch-evaluate<br/>/history · /health · /sample-cvs"]
+        Sanitizer["Exception sanitizer<br/>(không lộ stack trace / đường dẫn máy chủ)"]
     end
 
-    subgraph Ingestion["Ingestion & Parsing Layer"]
-        RouterDoc{Kiểm tra Text số}
-        FastPath["PyMuPDF Native Engine (<0.05s)"]
-        OCR["PaddleOCR PP-OCRv4 (~2-3s)"]
-        Cleaner["Text Cleaner & Normalizer"]
-        Pydantic["Pydantic v2 Schemas"]
+    subgraph Ingestion["Ingestion — services/cv_parser_service.py"]
+        Detect{"Text số<br/>≥ 40 từ?"}
+        Fast["PyMuPDF fast path<br/>(không OCR, giữ nguyên chuỗi)"]
+        OCR["PaddleOCR + layout/column analysis"]
+        Docx["python-docx<br/>paragraphs + tables"]
+        Extract["Trích xuất thực thể:<br/>kỹ năng · kinh nghiệm · học vấn · ngoại ngữ"]
     end
 
-    subgraph Scoring["AI Scoring & Vector Search"]
-        Matcher["Hard Skills Context Matcher (40đ)"]
-        ExpScorer["Experience Duration Scorer (25đ)"]
-        Vector["Dense Vector Search: Multilingual-E5 (15đ)"]
-        EduLang["Education (10đ) & Language (10đ)"]
+    subgraph Scoring["Scoring — services/scoring_service.py"]
+        W["Tổng = 10 × (0.6·Kỹ năng + 0.2·Kinh nghiệm<br/>+ 0.1·Học vấn + 0.1·Ngoại ngữ)"]
     end
 
-    subgraph GenAI["LLM Technical Appraisal"]
-        RouterLLM{LLM Selector}
-        Gemini["Google Gemini 2.5 Flash API"]
-        Local["Local Qwen2.5-7B GGUF"]
+    subgraph LLM["GenAI — models/llm_model.py"]
+        Gemini["Gemini 2.5 Flash (REST)"]
+        Fallback["Local LLM Qwen2.5-7B GGUF<br/>(llama-cpp-python)"]
     end
 
-    WebUI --> Router
-    Router --> SecurityMW
-    SecurityMW --> RouterDoc
-    RouterDoc -- ">= 40 từ" --> FastPath
-    RouterDoc -- "< 40 từ" --> OCR
-    FastPath & OCR --> Cleaner --> Pydantic
-    Pydantic --> Matcher & ExpScorer & Vector & EduLang
-    Matcher & ExpScorer & Vector & EduLang --> RouterLLM
-    RouterLLM --> Gemini & Local
-    Gemini & Local --> Router
+    Storage[("data/history.json<br/>ghi atomic + khoá tiến trình")]
+
+    WebUI --> EP --> Sanitizer --> Detect
+    Detect -- có --> Fast
+    Detect -- không --> OCR
+    Docx --> Extract
+    Fast & OCR --> Extract
+    Extract --> W --> Gemini
+    Gemini -- "lỗi / thiếu key" --> Fallback
+    W --> Storage
 ```
 
 ---
 
-## ⚡ So sánh Hiệu năng (Benchmark)
+## 3. Chấm điểm: công thức và ngữ nghĩa
 
-| Tiêu chí | Phiên bản cũ (Baseline) | Phiên bản nâng cấp (Enterprise AI) | Mức cải thiện |
-| :--- | :--- | :--- | :--- |
-| **Giao diện & Trải nghiệm** | Streamlit mặc định | **Enterprise Web SaaS (HTML5 + Tailwind)** | Chuyên nghiệp, sạch sẽ, không sặc mùi AI |
-| **Bảo mật Giao diện** | Dễ lộ stack traces/file path | **Sanitized Response (Không lộ path/code)** | Chuẩn an toàn ứng dụng doanh nghiệp |
-| **Xử lý Digital PDF** | Ép chạy PaddleOCR (25 - 45s) | Fast-path PyMuPDF (**0.04s**) | **Nhanh gấp ~600 lần** |
-| **Phụ thuộc Poppler** | Bắt buộc cài đặt thủ công vào PATH | Độc lập hoàn toàn trong RAM | **Không cần cài đặt thêm** |
-| **Độ chính xác Matching** | Regex so khớp từ khóa cứng | **Semantic Cosine Similarity** + Aliases | Giảm 90% trường hợp bỏ sót |
-| **Thời gian sinh AI Report**| Chạy Local 7B (30 - 60s) | Google Gemini Flash (**1.5s**) | **Nhanh gấp 25 lần**, 0% tải GPU |
-| **Kiểu dữ liệu & Type Safety**| Dict/List lỏng lẻo | **Pydantic V2 Models** chặt chẽ | Chuẩn Backend Production |
-| **Kiểm thử Tự động** | Chưa có test | **17/17 Unit & API Tests Passed** | Kiểm soát chất lượng tự động |
+`services/scoring_service.py` trả về `(total_score, breakdown)`; `total_score` là điểm **đa tiêu chí**, không phải riêng kỹ năng.
 
----
+| Tiêu chí | Trọng số | Cách tính tỷ số |
+| :--- | :--- | :--- |
+| Kỹ năng chuyên môn | **60%** | `tech_score_10 / 10` — khớp kỹ năng JD theo cấp độ (Basic/Intermediate/Good/Senior) với alias (`k8s`→Kubernetes, `postgres`→PostgreSQL) |
+| Kinh nghiệm thực tế | **20%** | `min(năm_ứng_viên / năm_yêu_cầu, 1)`; JD không yêu cầu = điểm tối đa |
+| Trình độ học vấn | **10%** | Đạt = 1.0 · tìm thấy bằng cấp thấp hơn = 0.5 · không tìm thấy = 0.0 |
+| Ngoại ngữ | **10%** | `số_ngôn_ngữ_khớp / số_ngôn_ngữ_yêu_cầu` |
 
-## 📁 Cấu trúc Thư mục
+Mỗi tiêu chí gắn nhãn `Đạt` / `Chưa đạt`; kết luận tổng hợp:
 
-```text
-├── backend/
-│   ├── main.py                 # FastAPI Application (Endpoints, Sanitizer, Static Mount)
-│   └── __init__.py
-├── frontend/
-│   ├── index.html              # Enterprise Web UI (Ashby/Greenhouse standard)
-│   └── assets/
-│       ├── css/styles.css      # Enterprise Design System
-│       └── js/app.js           # Client Controller & Chart.js Integration
-├── app.py                      # Streamlit Dashboard (Tùy chọn)
-├── start.sh                    # Multi-service Container Entrypoint (FastAPI + Streamlit)
-├── core/                       # Cấu hình hệ thống, DLL Hotfixes, Constants, Logger
-├── models/                     # AI Providers (PaddleOCR, Multilingual-E5, Dual LLM)
-├── schemas/                    # Pydantic v2 Models (Candidate, JD, Breakdown, Result)
-├── services/                   # Business Logic (CV Parser, Scorer, LLM, History)
-├── ui/                         # Streamlit UI Components & Radar Chart (Plotly)
-├── utils/                      # File loader không Poppler, Image thresholding, Text cleaner
-├── data/
-│   ├── sample_cvs/             # Bộ sưu tập 80 file CV mẫu thử nghiệm
-│   └── history.json            # Lưu trữ lịch sử chấm điểm
-├── tests/                      # Bộ 17 Unit & API Test tự động (pytest)
-│   ├── test_backend_api.py     # API Endpoints & Frontend serving tests
-│   ├── test_parsers.py         # Fast-path, Regex & Entity tests
-│   ├── test_schemas.py         # Pydantic v2 validation tests
-│   └── test_scorer.py          # Multi-criteria scoring tests
-├── Dockerfile                  # Container đóng gói chuẩn Python 3.11-slim
-├── docker-compose.yml          # Quản lý Container và 3 loại Volumes (Ports 8000 & 8501)
-├── .env.example                # Mẫu biến môi trường
-└── requirements.txt            # Danh sách dependencies đã khóa phiên bản tương thích
-```
+- `Đạt Yêu Cầu` — cả 4 tiêu chí đạt.
+- `Cân Nhắc Phỏng Vấn` — kỹ năng đạt và nhiều nhất 1 tiêu chí phụ chưa đạt.
+- `Chưa Đạt Yêu Cầu` — các trường hợp còn lại.
+
+`breakdown` kèm khoá `Total_Score` và `Weights` để UI hiển thị đúng công thức đã dùng (không hard-code trong frontend).
+
+### Vai trò của embedding
+
+`intfloat/multilingual-e5-base` được nạp lazy và dùng làm **fallback ngữ nghĩa khi regex không xác định được trình độ học vấn** (cosine similarity giữa dòng văn bản và các bậc học). Khớp kỹ năng vẫn là thuật toán có trọng số cấp độ — trang này không tuyên bố semantic search cho toàn bộ pipeline.
 
 ---
 
-## 🚀 Hướng dẫn Cài đặt & Chạy ứng dụng
+## 4. Trích xuất tài liệu
 
-### Cách 1: Chạy trực tiếp trên máy cục bộ (Windows / Linux)
+| Đầu vào | Đường đi | Ghi chú |
+| :--- | :--- | :--- |
+| PDF có text layer | PyMuPDF, bỏ qua OCR | Văn bản số **không** đi qua bộ làm sạch OCR, vì nó phá chuỗi hợp lệ (`Django4` → `Djang04`) |
+| PDF scan / ảnh | PaddleOCR PP-OCRv4 + phân tích cột bằng OpenCV | Tự kích hoạt khi text số < 40 từ |
+| DOCX | `python-docx`: paragraphs **và tables** | Bảng CV (thông tin cá nhân, kỹ năng) không nằm trong `doc.paragraphs` |
 
-1. **Yêu cầu:** Python 3.10 hoặc 3.11 (Khuyến nghị Python 3.11).
-2. **Cài đặt thư viện:**
-   ```bash
-   pip install -r requirements.txt
-   ```
-3. **Cấu hình API Key (Tuỳ chọn cho Gemini siêu tốc):**
-   - Copy file cấu hình:
-     ```bash
-     copy .env.example .env
-     ```
-   - Điền `GEMINI_API_KEY=` vào file `.env` (Lấy miễn phí tại [Google AI Studio](https://aistudio.google.com/)).
-4. **Khởi chạy ứng dụng Web Doanh nghiệp (FastAPI + Web UI):**
-   ```bash
-   python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
-   ```
-   Truy cập giao diện: 👉 **`http://localhost:8000`**  
-   Tài liệu API Swagger: 👉 **`http://localhost:8000/docs`**
-
-5. *(Tùy chọn)* Khởi chạy giao diện Streamlit:
-   ```bash
-   streamlit run app.py
-   ```
-   Truy cập: 👉 **`http://localhost:8501`**
+Tính kinh nghiệm gộp các khoảng thời gian (`2021 - 2024`, `2022 đến nay`, `2019 to present`) rồi hợp nhất khoảng chồng lấn, đồng thời bỏ qua dòng chứa từ khoá học vấn để không đếm năm đi học thành năm đi làm.
 
 ---
 
-### Cách 2: Chạy bằng Docker (Khuyến nghị cho MLOps)
+## 5. LLM và chuỗi fallback
 
-1. Mở **Docker Desktop** trên máy tính.
-2. Tại thư mục dự án, khởi chạy:
-   ```bash
-   docker compose up -d --build
-   ```
-3. Truy cập ngay trên trình duyệt:
-   - 🌟 **Giao diện Doanh nghiệp TalentMatch:** 👉 **`http://localhost:8000`**
-   - 📊 **Streamlit Dashboard:** 👉 **`http://localhost:8501`**
+1. **Gemini 2.5 Flash** qua REST, API key đặt trong header `x-goog-api-key` (không nằm trong URL/log), tự thử `gemini-2.0-flash` nếu model đầu lỗi.
+2. Mọi lỗi provider được gói trong `LLMProviderError` (`GeminiNotConfiguredError`, `GeminiAPIError`, `LocalLLMError`).
+3. `services/llm_service.py` bắt các exception đó và **fallback sang Local LLM đã nạp**; nếu local cũng không khả dụng, người dùng nhận một thông báo Markdown thân thiện thay vì chi tiết kỹ thuật.
 
 ---
 
-## 🧪 Chạy Kiểm thử Tự động (Automated Tests)
+## 6. API
 
-Dự án tích hợp bộ 17 bài kiểm tra tự động bao phủ toàn diện từ Pydantic validation, parser, thuật toán tính điểm đến REST API endpoints:
+| Method | Đường dẫn | Mô tả |
+| :--- | :--- | :--- |
+| `POST` | `/api/v1/evaluate` | Thẩm định 1 CV (multipart: `file`, `job_title`, `tech_skills`, …) |
+| `POST` | `/api/v1/batch-evaluate` | Xếp hạng nhiều CV; trả `processed`, `saved_to_history`, `failed[{file_name, reason}]` |
+| `GET` | `/api/v1/history` | Danh sách nhật ký đánh giá (mới nhất trước) |
+| `DELETE` | `/api/v1/history` | Xoá nhật ký — cần `X-Admin-Token` nếu đã đặt `APP_ADMIN_TOKEN` |
+| `GET` | `/api/v1/health` | Trạng thái **thật** của từng động cơ |
+| `GET` | `/api/v1/sample-cvs` | CV mẫu trong `data/sample_cvs/` |
+| `GET` | `/` · `/assets/*` | Web UI tĩnh và tài nguyên |
+| `GET` | `/docs` | Swagger UI |
+
+`/api/v1/health` phân biệt `operational` / `available_lazy` / `loaded` / `missing_*`, và trả `status: "degraded"` khi có động cơ thiếu thật — ví dụ máy chưa cấu hình `GEMINI_API_KEY` sẽ báo `llm_cloud: missing_api_key`. Endpoint này không nạp model và không bao giờ trả key.
+
+---
+
+## 7. Bảo mật
+
+- Response được sanitize: không stack trace, không đường dẫn nội bộ, không system prompt.
+- Báo cáo Markdown từ LLM được render qua `marked` + **DOMPurify** ở frontend.
+- API key chỉ đi qua header; `data/` và `.env` nằm ngoài git.
+- Ghi `history.json` bằng `mkstemp` → `fsync` → `os.replace` (atomic) dưới `threading.Lock`, nên không tiến trình nào đọc phải file đang viết dở.
+- CORS **tắt mặc định** (frontend cùng nguồn); chỉ bật khi `CORS_ALLOW_ORIGINS` liệt kê origin cụ thể — `allow_origins=["*"]` kèm credentials là cấu hình sai.
+
+---
+
+## 8. Cài đặt & chạy
+
+### Yêu cầu
+
+Python **3.10 / 3.11** (đã kiểm thử trên 3.11). PaddleOCR 2.7 và PyTorch cần đúng cặp phiên bản — dùng `requirements.txt` đã khoá.
 
 ```bash
-pytest -v
+pip install -r requirements.txt
+copy .env.example .env        # Windows; Linux: cp .env.example .env
+python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-Kết quả: **`17 passed`** (100% Passed).
+Giao diện: `http://localhost:8000` · Swagger: `http://localhost:8000/docs`.
+
+Lần chạy đầu, PaddleOCR và embedding sẽ tự tải trọng số về máy (vài GB, chạy nền).
+
+### Docker
+
+```bash
+docker compose up -d --build
+```
+
+Một cổng duy nhất `8000`, kèm healthcheck và 3 nhóm volume: `./data` (nhật ký + CV mẫu), `./models_cache` (trọng số AI), và source mount cho live-reload.
+
+### Biến môi trường
+
+| Biến | Mặc định | Tác dụng |
+| :--- | :--- | :--- |
+| `GEMINI_API_KEY` | *(trống)* | Bật nhánh LLM đám mây; trống → fallback Local LLM |
+| `APP_ADMIN_TOKEN` | *(trống)* | Khoá `DELETE /api/v1/history`; trống → xoá công khai (chỉ nên khi dev) |
+| `CORS_ALLOW_ORIGINS` | *(trống)* | Danh sách origin phân tách bằng dấu phẩy; trống → không bật CORS |
 
 ---
 
-## 👨‍💻 Tác giả
-- Dự án được phát triển và nâng cấp nhằm định hướng ứng tuyển vị trí **Intern / Junior AI Engineer**.
+## 9. Frontend: build tĩnh, không CDN
+
+Tailwind dùng **bản build tĩnh** (`frontend/assets/css/tailwind.build.css`), Chart.js / marked / DOMPurify được **vendored** tại `frontend/assets/vendor/`. UI vì vậy không phụ thuộc CDN lúc chạy; tài nguyên ngoài duy nhất còn lại là Google Fonts (Inter), suy giảm về font hệ thống khi offline.
+
+Sinh lại bản build sau khi đổi class trong `frontend/index.html` hoặc `frontend/assets/js/app.js`:
+
+```bash
+npx --yes tailwindcss@3.4.17 -c frontend/tailwind.config.js \
+  -i frontend/tailwind.input.css \
+  -o frontend/assets/css/tailwind.build.css --minify
+```
+
+---
+
+## 10. Kiểm thử
+
+```bash
+pytest -q
+```
+
+**36/36 passed.** Bộ test phủ: schema Pydantic, fast-path PDF (dựng PDF số bằng `fitz` để chứng minh chuỗi không bị làm hỏng), DOCX bảng, hợp nhất khoảng thời gian, điểm tổng hợp đa tiêu chí, chuỗi fallback LLM (key nằm ở header, cả hai model đều được thử, thông báo thân thiện), ghi lịch sử atomic (8 luồng song song, không còn file tạm), và các endpoint API + admin token.
+
+```bash
+pytest tests/test_backend_api.py -q   # chỉ nhóm API
+```
+
+---
+
+## 11. Cấu trúc thư mục
+
+```text
+├── backend/main.py            # FastAPI: endpoints, sanitizer, health, static mount
+├── core/                      # config.py (env + .env), logger, constants
+├── models/                    # llm_model.py (Gemini/Local), embedding_model.py, OCR
+├── schemas/                   # Pydantic v2: Candidate, JD, Breakdown, Result
+├── services/                  # cv_parser · jd_parser · scoring · llm · history
+├── utils/                     # loader không Poppler, thresholding, text cleaner
+├── frontend/
+│   ├── index.html             # Web UI (3 tab: thẩm định / batch / nhật ký)
+│   ├── tailwind.config.js     # Cấu hình build tĩnh
+│   ├── tailwind.input.css
+│   └── assets/
+│       ├── css/               # styles.css + tailwind.build.css
+│       ├── js/app.js          # Controller: fetch, radar chart, CSV export
+│       └── vendor/            # chart.umd.js, marked.min.js, purify.min.js
+├── tests/                     # pytest (6 files)
+├── data/                      # gitignored: history.json, sample_cvs/, models_cache/
+├── Dockerfile                 # python:3.11-slim, torch bản CPU
+├── docker-compose.yml
+└── requirements.txt
+```
+
+`data/` bị gitignore, nên **CV mẫu không có trong repo** — tự thêm file `.pdf` vào `data/sample_cvs/` để dùng chức năng xếp hạng hàng loạt.
+
+---
+
+## 12. Hạn chế đã biết
+
+- Matching kỹ năng là rule/alias-based: kỹ năng viết theo cách lạ (vd. `LangChain`, `pg_vector`) có thể không được nhận diện.
+- `history.json` là kho đơn tiến trình; chạy nhiều worker/uvicorn process cần chuyển sang database hoặc khoá cấp hệ điều hành.
+- OCR tiếng Việt trên bản scan mờ vẫn nhầm ký tự; pipeline chỉ chạy OCR khi thật sự cần.
+- Điểm số phản ánh đúng 4 tiêu chí đã khai báo, không đánh giá chất lượng dự án hay soft skill — quyết định cuối vẫn thuộc về người phỏng vấn.
+
+---
+
+## 13. Tác giả
+
+Dự án phát triển từ bài tập thực tập (nhóm, 2025), được viết lại toàn bộ phần chấm điểm, trích xuất và frontend nhằm ứng tuyển vị trí **AI Engineer Intern**.
