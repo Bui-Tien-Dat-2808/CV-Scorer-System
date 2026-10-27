@@ -1,22 +1,30 @@
-fastapi>=0.110.0
-uvicorn>=0.28.0
-python-multipart>=0.0.9
-paddleocr>=2.7.3
+# Web API
+fastapi~=0.111.0
+uvicorn[standard]~=0.30.0
+python-multipart~=0.0.20
+pydantic~=2.12.0
+python-dotenv~=1.0.0
+requests~=2.34.0
+
+# OCR & xử lý ảnh (PaddleOCR 2.x cần cặp phiên bản khớp nhau)
 paddlepaddle==2.6.2
-protobuf<=3.20.2,>=3.1.0
+paddleocr==2.7.3
+protobuf==3.20.2
 numpy==1.26.4
+opencv-python-headless==4.9.0.80
+Pillow==10.2.0
+
+# Trích xuất tài liệu
 PyMuPDF==1.24.3
-Pillow>=10.2.0
-pandas>=2.2.0
-python-dateutil>=2.9.0
-opencv-python-headless>=4.6.0.66,<4.10.0.0
-python-docx>=1.1.0
-fuzzywuzzy[speedup]>=0.18.0
-python-Levenshtein>=0.25.0
-huggingface_hub>=0.20.0
-sentence_transformers>=2.5.0
-plotly>=5.20.0
-torch>=2.0.0
-pydantic>=2.5.0
-google-generativeai>=0.8.0
-python-dotenv>=1.0.0
+python-docx==1.2.0
+
+# Embedding cho nhánh suy luận ngữ nghĩa
+sentence-transformers==5.2.0
+torch==2.9.1
+huggingface-hub==0.36.0
+
+# Kiểm thử
+pytest~=8.3.0
+
+# Tuỳ chọn cho động cơ Local LLM (cần C++ toolchain; mã nguồn tự bỏ qua nếu chưa cài):
+# llama-cpp-python==0.3.16
