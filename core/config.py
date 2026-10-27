@@ -1,5 +1,10 @@
 import os
 
+from dotenv import load_dotenv
+
+# Nạp .env trước khi Settings đọc biến môi trường lúc import module.
+load_dotenv()
+
 # Windows DLL Hotfix: PyTorch phải được nạp trước PaddlePaddle để tránh xung đột shm.dll / OpenMP
 try:
     import torch
@@ -23,5 +28,11 @@ class Settings:
     # Paths
     ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     MODEL_CACHE_DIR = os.path.join(ROOT_DIR, "data", "models_cache")
+
+    # Bảo mật & miền truy cập
+    # Origin được phép gọi cross-origin, phân tách bằng dấu phẩy. Rỗng = chỉ phục vụ cùng nguồn.
+    CORS_ALLOW_ORIGINS = [o.strip() for o in os.getenv("CORS_ALLOW_ORIGINS", "").split(",") if o.strip()]
+    # Token bảo vệ thao tác xoá lịch sử. Chưa đặt = xoá công khai (chỉ nên để khi dev).
+    ADMIN_TOKEN = os.getenv("APP_ADMIN_TOKEN", "").strip()
 
 settings = Settings()

@@ -3,6 +3,7 @@ import glob
 import json
 import tempfile
 import traceback
+from importlib.util import find_spec
 from typing import List, Optional
 
 from fastapi import FastAPI, UploadFile, File, Form, Header, HTTPException, Request, status
@@ -10,13 +11,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from core.config import settings
 from core.logger import logger
 from services.cv_parser_service import CVParserService
 from services.jd_parser_service import parse_jd_input, categorize_skills
 from services.scoring_service import ScoringService
 from services.history_service import HistoryService
 from services.llm_service import generate_ai_feedback
-from models.llm_model import LocalLLM
+from models.llm_model import GeminiProvider, LocalLLM
 
 # Khởi tạo FastAPI Application
 app = FastAPI(
@@ -27,14 +29,17 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
-# Cấu hình CORS an toàn
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
-    allow_headers=["*"],
-)
+# CORS: `allow_origins=["*"]` kèm `allow_credentials=True` là cấu hình sai
+# (trình duyệt từ chối phản hồi có credentials). Mặc định frontend được phục vụ
+# cùng nguồn nên không cần CORS; chỉ bật khi cấu hình CORS_ALLOW_ORIGINS cụ thể.
+if settings.CORS_ALLOW_ORIGINS:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.CORS_ALLOW_ORIGINS,
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+        allow_headers=["*"],
+    )
 
 # Khởi tạo Singletons Services
 parser_service = CVParserService()
@@ -61,29 +66,58 @@ async def global_exception_handler(request: Request, exc: Exception):
 # API ENDPOINTS (Chuẩn RESTful)
 # =============================================================================
 
+def _module_available(module_name: str) -> bool:
+    """Kiểm tra thư viện có cài đặt được không mà không import (không tốn thời gian nạp)."""
+    try:
+        return find_spec(module_name) is not None
+    except (ImportError, ValueError):
+        return False
+
 @app.get("/api/v1/health")
 def health_check():
-    """Kiểm tra trạng thái sẵn sàng của các dịch vụ cốt lõi."""
-    return {
-        "status": "healthy",
-        "service": "TalentMatch AI Core",
-        "version": "2.0.0",
-        "engines": {
-            "fastpath_pdf": "operational",
-            "ocr_engine": "operational",
-            "vector_semantic_search": "operational",
-            "llm_router": "operational"
-        }
+    """Báo trạng thái thật của từng động cơ: thiếu thư viện / chưa cấu hình key đều lộ ra đây."""
+    engines = {
+        "fastpath_pdf": "operational" if _module_available("fitz") else "missing_pymupdf",
+        # Lazy model: chỉ báo "loaded" khi thực sự đã nạp, không nạp model trong health check.
+        "ocr_engine": (
+            "loaded" if parser_service._ocr is not None
+            else "available_lazy" if _module_available("paddleocr") else "missing_paddleocr"
+        ),
+        "vector_semantic_search": (
+            "loaded" if parser_service._embedder is not None
+            else "available_lazy" if _module_available("sentence_transformers") else "missing_sentence_transformers"
+        ),
+        "llm_cloud": "configured" if GeminiProvider().is_configured() else "missing_api_key",
+        "llm_local": (
+            "loaded" if LocalLLM.get_instance().is_loaded()
+            else "available" if _module_available("llama_cpp") else "missing_llama_cpp"
+        ),
     }
+    history_writable = os.access(os.path.dirname(history_service.file_path), os.W_OK)
+    engines["history_storage"] = "writable" if history_writable else "read_only"
+
+    degraded = any(str(v).startswith("missing") for v in engines.values()) or not history_writable
+    return {
+        "status": "degraded" if degraded else "healthy",
+        "service": "TalentMatch AI Core",
+        "version": app.version,
+        "admin_token_configured": bool(settings.ADMIN_TOKEN),
+        "cors_origins": settings.CORS_ALLOW_ORIGINS or ["same-origin"],
+        "engines": engines,
+    }
+
+SAMPLE_CVS_DIR = os.path.join(settings.ROOT_DIR, "data", "sample_cvs")
+
+def _list_sample_cvs() -> List[str]:
+    """Liệt kê CV mẫu theo thứ tự tên để mỗi lần chạy batch lấy đúng cùng tập file."""
+    if not os.path.isdir(SAMPLE_CVS_DIR):
+        return []
+    return sorted(glob.glob(os.path.join(SAMPLE_CVS_DIR, "*.pdf")))
 
 @app.get("/api/v1/sample-cvs")
 def get_sample_cvs():
     """Lấy danh sách các hồ sơ mẫu có sẵn trong hệ thống."""
-    sample_dir = os.path.join("data", "sample_cvs")
-    if not os.path.exists(sample_dir):
-        return {"count": 0, "files": []}
-    
-    files = [os.path.basename(f) for f in glob.glob(os.path.join(sample_dir, "*.pdf"))]
+    files = [os.path.basename(f) for f in _list_sample_cvs()]
     return {
         "count": len(files),
         "files": files[:80]
@@ -232,11 +266,14 @@ async def batch_evaluate_cvs(
 
     target_files = []
     if use_sample_cvs:
-        sample_dir = os.path.join("data", "sample_cvs")
-        if os.path.exists(sample_dir):
-            all_samples = glob.glob(os.path.join(sample_dir, "*.pdf"))
-            limit = min(max(1, batch_limit), len(all_samples), 80)
-            target_files = [(f, os.path.basename(f)) for f in all_samples[:limit]]
+        all_samples = _list_sample_cvs()
+        if not all_samples:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Thư mục mẫu trống: không tìm thấy file .pdf nào trong {SAMPLE_CVS_DIR}."
+            )
+        limit = min(max(1, batch_limit), len(all_samples), 80)
+        target_files = [(f, os.path.basename(f)) for f in all_samples[:limit]]
 
     if not target_files:
         raise HTTPException(
@@ -245,10 +282,12 @@ async def batch_evaluate_cvs(
         )
 
     records = []
+    failed = []
     for path, fname in target_files:
         try:
             c_text, c_err, c_mode = parser_service.parse_cv_document(path)
             if c_err or not c_text:
+                failed.append({"file_name": fname, "reason": c_err or "Không trích xuất được nội dung CV."})
                 continue
 
             info = parser_service.extract_info(c_text, mode=c_mode)
@@ -265,6 +304,7 @@ async def batch_evaluate_cvs(
             }
 
             c_score, c_breakdown = scoring_service.calculate_score(c_data, jd_parsed)
+            history_service.save_record(c_data, c_score, jd_parsed["job_title"], c_breakdown)
 
             status_label = c_breakdown.get("Overall", "Chưa Đạt Yêu Cầu")
 
@@ -283,7 +323,8 @@ async def batch_evaluate_cvs(
                 "status": status_label
             })
         except Exception as e:
-            logger.warning(f"Bỏ qua file {fname} do lỗi: {e}")
+            logger.warning(f"Không chấm được file {fname}: {e}")
+            failed.append({"file_name": fname, "reason": f"Lỗi xử lý: {type(e).__name__}"})
             continue
 
     # Sắp xếp từ cao xuống thấp
@@ -294,6 +335,9 @@ async def batch_evaluate_cvs(
     return {
         "success": True,
         "count": len(records),
+        "processed": len(target_files),
+        "saved_to_history": len(records),
+        "failed": failed,
         "data": records
     }
 
@@ -308,8 +352,13 @@ def get_evaluation_history():
     }
 
 @app.delete("/api/v1/history")
-def clear_evaluation_history():
-    """Xóa toàn bộ dữ liệu lịch sử."""
+def clear_evaluation_history(x_admin_token: Optional[str] = Header(None)):
+    """Xóa toàn bộ dữ liệu lịch sử. Đặt APP_ADMIN_TOKEN để khoá thao tác xoá công khai này."""
+    if settings.ADMIN_TOKEN and x_admin_token != settings.ADMIN_TOKEN:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Thao tác xoá lịch sử cần đúng X-Admin-Token (biến môi trường APP_ADMIN_TOKEN)."
+        )
     history_service.clear_history()
     return {
         "success": True,
