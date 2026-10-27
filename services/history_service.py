@@ -1,9 +1,12 @@
 import os
 import json
 import uuid
+import tempfile
+import threading
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 from core.config import settings
+from core.logger import logger
 
 class HistoryService:
     def __init__(self, storage_file: str = "history.json"):
@@ -12,12 +15,28 @@ class HistoryService:
         os.makedirs(self.data_dir, exist_ok=True)
         
         self.file_path = os.path.join(self.data_dir, storage_file)
+        # Một quy trình lưu file duy nhất (FastAPI) nên khoá tiến trình là đủ;
+        # ghi nhiều tiến trình cùng lúc vẫn cần cơ sở dữ liệu hoặc khoá file.
+        self._lock = threading.Lock()
         self._ensure_file_exists()
 
     def _ensure_file_exists(self):
         if not os.path.exists(self.file_path):
-            with open(self.file_path, 'w', encoding='utf-8') as f:
-                json.dump([], f)
+            self._write_history([])
+
+    def _write_history(self, history: List[Dict[str, Any]]):
+        """Ghi file tạm rồi os.replace: tiến trình khác không bao giờ đọc phải file đang viết dở."""
+        fd, tmp_path = tempfile.mkstemp(prefix=".history-", suffix=".tmp", dir=self.data_dir)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(history, f, ensure_ascii=False, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_path, self.file_path)
+        except Exception:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+            raise
 
     def load_history(self) -> List[Dict[str, Any]]:
         """Đọc toàn bộ lịch sử từ file JSON"""
@@ -26,7 +45,7 @@ class HistoryService:
                 data = json.load(f)
                 return sorted(data, key=lambda x: x.get('timestamp', ''), reverse=True)
         except Exception as e:
-            print(f"Error loading history: {e}")
+            logger.error(f"Lỗi đọc lịch sử đánh giá: {e}")
             return []
 
     def save_record(self, cv_data: Dict, match_score: float, job_title: str,
@@ -59,16 +78,15 @@ class HistoryService:
             "summary_skills": skills_list[:5]
         }
 
-        history = self.load_history()
-        history.append(record)
-        
-        try:
-            with open(self.file_path, 'w', encoding='utf-8') as f:
-                json.dump(history, f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            print(f"Error saving history: {e}")
+        with self._lock:
+            history = self.load_history()
+            history.append(record)
+            try:
+                self._write_history(history)
+            except Exception as e:
+                logger.error(f"Lỗi lưu lịch sử đánh giá: {e}")
 
     def clear_history(self):
         """Xóa toàn bộ lịch sử"""
-        with open(self.file_path, 'w', encoding='utf-8') as f:
-            json.dump([], f)
+        with self._lock:
+            self._write_history([])
