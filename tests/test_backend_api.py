@@ -1,5 +1,7 @@
-import pytest
 import os
+import re
+
+import pytest
 from fastapi.testclient import TestClient
 from backend.main import app
 
@@ -11,12 +13,57 @@ def test_frontend_root():
     assert "TalentMatch Enterprise" in response.text
     assert "navTabs" in response.text
 
-def test_health_check():
+def test_frontend_served_without_cdn():
+    """UI phải chạy offline được: không còn thẻ script/stylesheet nào trỏ tới CDN."""
+    response = client.get("/")
+    external = re.findall(r'(?:src|href)="(https?://[^"]+)"', response.text)
+    # Google Fonts là tài nguyên ngoài duy nhất còn lại, và nó suy giảm về font hệ thống.
+    assert [u for u in external if "fonts.g" not in u] == []
+
+REQUIRED_ENGINES = {
+    "fastpath_pdf", "ocr_engine", "vector_semantic_search",
+    "llm_cloud", "llm_local", "history_storage",
+}
+
+def test_health_check_reports_real_engine_state():
+    """Health phản ánh trạng thái thật, nên 'degraded' trên máy thiếu API key là kết quả đúng."""
     response = client.get("/api/v1/health")
     assert response.status_code == 200
     data = response.json()
-    assert data["status"] == "healthy"
     assert data["service"] == "TalentMatch AI Core"
+    assert set(data["engines"]) == REQUIRED_ENGINES
+    assert data["status"] in {"healthy", "degraded"}
+
+    # status phải là hàm của chính các động cơ, không phải giá trị cứng
+    missing = [k for k, v in data["engines"].items()
+               if str(v).startswith("missing") or v == "read_only"]
+    assert (data["status"] == "degraded") == bool(missing)
+
+    # Khoá thật không bao giờ được đi qua health endpoint
+    api_key = os.getenv("GEMINI_API_KEY", "")
+    if api_key:
+        assert api_key not in response.text
+
+def test_clear_history_requires_admin_token_when_configured(monkeypatch):
+    """Đã đặt APP_ADMIN_TOKEN thì xoá lịch sử phải có token đúng; sai token là 401."""
+    from backend import main as backend_main
+
+    cleared = []
+    monkeypatch.setattr(backend_main.settings, "ADMIN_TOKEN", "s3cret-token")
+    # Spy thay vì xoá thật: lịch sử của người dùng không được đụng tới trong test.
+    monkeypatch.setattr(
+        backend_main.history_service, "clear_history", lambda: cleared.append(True)
+    )
+
+    assert client.delete("/api/v1/history").status_code == 401
+    assert client.delete(
+        "/api/v1/history", headers={"X-Admin-Token": "wrong"}
+    ).status_code == 401
+    assert cleared == []
+
+    ok = client.delete("/api/v1/history", headers={"X-Admin-Token": "s3cret-token"})
+    assert ok.status_code == 200
+    assert cleared == [True]
 
 def test_get_sample_cvs():
     response = client.get("/api/v1/sample-cvs")
