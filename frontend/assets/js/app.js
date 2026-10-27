@@ -71,20 +71,45 @@ function showAlert(message, type = "error") {
   }, 8000);
 }
 
+// Nhãn gọn cho từng động cơ health endpoint báo thiếu, dùng trên badge header.
+const ENGINE_LABELS = {
+  fastpath_pdf: "PyMuPDF",
+  ocr_engine: "PaddleOCR",
+  vector_semantic_search: "Embedding",
+  llm_cloud: "Gemini API key",
+  llm_local: "Local LLM",
+  history_storage: "Lưu lịch sử",
+};
+
 function checkSystemHealth() {
   fetch("/api/v1/health")
     .then((res) => res.json())
     .then((data) => {
       const statusText = document.getElementById("systemStatusText");
-      if (statusText && data.status === "healthy") {
+      const statusDot = document.getElementById("systemStatusDot");
+      if (!statusText || !statusDot) return;
+
+      const engines = data.engines || {};
+      const missing = Object.entries(engines)
+        .filter(([, v]) => String(v).startsWith("missing") || v === "read_only")
+        .map(([k]) => ENGINE_LABELS[k] || k);
+
+      // "degraded" phải hiện ra rõ, không được để badge tiếp tục claims "Ready".
+      if (data.status === "healthy") {
         statusText.textContent = "Core Services Ready";
+        statusDot.className = "w-2 h-2 rounded-full bg-emerald-500 inline-block flex-shrink-0";
+      } else {
+        statusText.textContent = missing.length
+          ? `Thiếu: ${missing.join(", ")}`
+          : "Hệ thống chạy một phần";
+        statusDot.className = "w-2 h-2 rounded-full bg-amber-500 inline-block flex-shrink-0";
       }
     })
     .catch(() => {
       const statusText = document.getElementById("systemStatusText");
-      if (statusText) {
-        statusText.textContent = "Offline / Maintenance";
-      }
+      const statusDot = document.getElementById("systemStatusDot");
+      if (statusText) statusText.textContent = "Offline / Maintenance";
+      if (statusDot) statusDot.className = "w-2 h-2 rounded-full bg-red-500 inline-block flex-shrink-0";
     });
 }
 
