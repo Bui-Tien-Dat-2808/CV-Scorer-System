@@ -33,6 +33,9 @@ def test_health_check_reports_real_engine_state():
     assert data["service"] == "TalentMatch AI Core"
     assert set(data["engines"]) == REQUIRED_ENGINES
     assert data["status"] in {"healthy", "degraded"}
+    assert data["engines"]["llm_local"] in {
+        "loaded", "available", "missing_llama_cpp", "missing_weights"
+    }
 
     # status phải là hàm của chính các động cơ, không phải giá trị cứng
     missing = [k for k, v in data["engines"].items()

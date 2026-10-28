@@ -15,11 +15,11 @@ document.addEventListener("DOMContentLoaded", () => {
   initNavigation();
   initDropzone();
   initEngineSelector();
+  initLanguageRequirements();
   initEvaluationHandlers();
   initModalHandlers();
   initBatchHandlers();
   initHistoryHandlers();
-  checkSystemHealth();
 });
 
 // =============================================================================
@@ -69,48 +69,6 @@ function showAlert(message, type = "error") {
   setTimeout(() => {
     alertBox.classList.add("hidden");
   }, 8000);
-}
-
-// Nhãn gọn cho từng động cơ health endpoint báo thiếu, dùng trên badge header.
-const ENGINE_LABELS = {
-  fastpath_pdf: "PyMuPDF",
-  ocr_engine: "PaddleOCR",
-  vector_semantic_search: "Embedding",
-  llm_cloud: "Gemini API key",
-  llm_local: "Local LLM",
-  history_storage: "Lưu lịch sử",
-};
-
-function checkSystemHealth() {
-  fetch("/api/v1/health")
-    .then((res) => res.json())
-    .then((data) => {
-      const statusText = document.getElementById("systemStatusText");
-      const statusDot = document.getElementById("systemStatusDot");
-      if (!statusText || !statusDot) return;
-
-      const engines = data.engines || {};
-      const missing = Object.entries(engines)
-        .filter(([, v]) => String(v).startsWith("missing") || v === "read_only")
-        .map(([k]) => ENGINE_LABELS[k] || k);
-
-      // "degraded" phải hiện ra rõ, không được để badge tiếp tục claims "Ready".
-      if (data.status === "healthy") {
-        statusText.textContent = "Core Services Ready";
-        statusDot.className = "w-2 h-2 rounded-full bg-emerald-500 inline-block flex-shrink-0";
-      } else {
-        statusText.textContent = missing.length
-          ? `Thiếu: ${missing.join(", ")}`
-          : "Hệ thống chạy một phần";
-        statusDot.className = "w-2 h-2 rounded-full bg-amber-500 inline-block flex-shrink-0";
-      }
-    })
-    .catch(() => {
-      const statusText = document.getElementById("systemStatusText");
-      const statusDot = document.getElementById("systemStatusDot");
-      if (statusText) statusText.textContent = "Offline / Maintenance";
-      if (statusDot) statusDot.className = "w-2 h-2 rounded-full bg-red-500 inline-block flex-shrink-0";
-    });
 }
 
 // =============================================================================
@@ -178,23 +136,119 @@ function handleSelectedFile(file) {
 
 function initEngineSelector() {
   const radios = document.querySelectorAll('input[name="llmProvider"]');
-  const apiKeyGroup = document.getElementById("apiKeyGroup");
   const labelGemini = document.getElementById("engineGeminiLabel");
   const labelLocal = document.getElementById("engineLocalLabel");
 
   radios.forEach((radio) => {
     radio.addEventListener("change", (e) => {
       if (e.target.value === "gemini") {
-        apiKeyGroup.classList.remove("hidden");
         labelGemini.classList.add("border-blue-600", "bg-blue-50/50");
         labelLocal.classList.remove("border-blue-600", "bg-blue-50/50");
       } else {
-        apiKeyGroup.classList.add("hidden");
         labelLocal.classList.add("border-blue-600", "bg-blue-50/50");
         labelGemini.classList.remove("border-blue-600", "bg-blue-50/50");
       }
     });
   });
+}
+
+// =============================================================================
+// 2b. Ngoại ngữ yêu cầu: bật/tắt, thêm và xoá từng dòng ngôn ngữ + trình độ
+// =============================================================================
+
+const LANGUAGE_OPTIONS = [
+  "English", "Japanese", "Korean", "Chinese",
+  "French", "German", "Spanish", "Vietnamese"
+];
+
+const LANGUAGE_LEVEL_OPTIONS = [
+  { value: "basic", label: "Cơ bản" },
+  { value: "intermediate", label: "Trung cấp" },
+  { value: "advanced", label: "Thành thạo" },
+  { value: "native", label: "Bản ngữ" }
+];
+
+const SELECT_CLASS = "flex-1 min-w-0 text-xs px-2 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-600 bg-white";
+
+function buildLanguageRow(language, level) {
+  const row = document.createElement("div");
+  row.className = "flex items-center gap-2";
+
+  const langSelect = document.createElement("select");
+  langSelect.className = SELECT_CLASS;
+  langSelect.setAttribute("aria-label", "Ngoại ngữ yêu cầu");
+  LANGUAGE_OPTIONS.forEach((option) => {
+    const el = document.createElement("option");
+    el.value = option;
+    el.textContent = option;
+    if (option === language) el.selected = true;
+    langSelect.appendChild(el);
+  });
+
+  const levelSelect = document.createElement("select");
+  levelSelect.className = SELECT_CLASS;
+  levelSelect.setAttribute("aria-label", "Trình độ tối thiểu");
+  LANGUAGE_LEVEL_OPTIONS.forEach((option) => {
+    const el = document.createElement("option");
+    el.value = option.value;
+    el.textContent = option.label;
+    if (option.value === level) el.selected = true;
+    levelSelect.appendChild(el);
+  });
+
+  const removeBtn = document.createElement("button");
+  removeBtn.type = "button";
+  removeBtn.className = "text-slate-400 hover:text-red-600 font-semibold px-1 flex-shrink-0";
+  removeBtn.textContent = "×";
+  removeBtn.setAttribute("aria-label", "Xoá ngoại ngữ này");
+  removeBtn.addEventListener("click", () => {
+    row.remove();
+    // Không để danh sách trống khi đang ở chế độ "Có yêu cầu".
+    if (!document.getElementById("langReqRows").children.length) {
+      addLanguageRow();
+    }
+  });
+
+  row.append(langSelect, levelSelect, removeBtn);
+  return row;
+}
+
+function addLanguageRow(language = "English", level = "basic") {
+  document.getElementById("langReqRows").appendChild(buildLanguageRow(language, level));
+}
+
+function initLanguageRequirements() {
+  const rows = document.getElementById("langReqRows");
+  const addBtn = document.getElementById("addLangReqBtn");
+  if (!rows || !addBtn) return;
+
+  addLanguageRow();
+
+  const syncVisibility = () => {
+    const required = document.getElementById("langReqYes").checked;
+    rows.classList.toggle("hidden", !required);
+    addBtn.classList.toggle("hidden", !required);
+  };
+
+  document.querySelectorAll('input[name="langRequired"]').forEach((radio) => {
+    radio.addEventListener("change", syncVisibility);
+  });
+  addBtn.addEventListener("click", () => addLanguageRow());
+  syncVisibility();
+}
+
+// "English:advanced,Japanese:basic" — rỗng khi JD không yêu cầu ngoại ngữ.
+function collectLanguageRequirements() {
+  if (!document.getElementById("langReqYes").checked) return "";
+  const seen = new Set();
+  const entries = [];
+  Array.from(document.getElementById("langReqRows").children).forEach((row) => {
+    const [langSelect, levelSelect] = row.querySelectorAll("select");
+    if (!langSelect || !levelSelect || seen.has(langSelect.value)) return;
+    seen.add(langSelect.value);
+    entries.push(`${langSelect.value}:${levelSelect.value}`);
+  });
+  return entries.join(",");
 }
 
 // =============================================================================
@@ -292,9 +346,7 @@ async function handleEvaluationSubmit() {
   const jdExp = parseFloat(document.getElementById("jdExp").value) || 0;
   const jdEdu = document.getElementById("jdEdu").value;
   const jdSkills = document.getElementById("jdSkills").value.trim();
-  const jdLang = document.getElementById("jdLang").value.trim();
   const provider = document.querySelector('input[name="llmProvider"]:checked').value;
-  const geminiApiKey = document.getElementById("geminiApiKey").value.trim();
 
   const formData = new FormData();
   formData.append("file", selectedFile);
@@ -302,21 +354,15 @@ async function handleEvaluationSubmit() {
   formData.append("required_experience_years", jdExp);
   formData.append("education_level", jdEdu);
   formData.append("tech_skills", jdSkills);
-  formData.append("foreign_languages", jdLang);
+  formData.append("foreign_languages", collectLanguageRequirements());
   formData.append("llm_provider", provider);
 
   // Set UI Loading State
   setEvaluationLoading(true);
 
   try {
-    const headers = {};
-    if (geminiApiKey) {
-      headers["x-gemini-api-key"] = geminiApiKey;
-    }
-
     const response = await fetch("/api/v1/evaluate", {
       method: "POST",
-      headers: headers,
       body: formData,
     });
 
@@ -669,7 +715,7 @@ async function handleBatchEvaluation() {
   formData.append("required_experience_years", exp);
   formData.append("education_level", "Bachelor");
   formData.append("tech_skills", "Python (Intermediate), PostgreSQL (Basic), Docker (Basic)");
-  formData.append("foreign_languages", "English");
+  formData.append("foreign_languages", "English:basic");
 
   btnRun.disabled = true;
   btnRun.textContent = "Đang xử lý hàng loạt...";

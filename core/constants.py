@@ -56,6 +56,16 @@ SKILL_LEVEL_MAPPING = {
     'cơ bản': 1, 'mới': 1, 'nhập môn': 1, 'tập sự': 1
 }
 
+# Thang trình độ ngoại ngữ ánh xạ theo khung CEFR. Dùng chung cho phía JD (mức
+# yêu cầu) và phía CV (bằng chứng từ chứng chỉ / mô tả) nên so sánh được bằng số.
+LANGUAGE_LEVELS = {'basic': 1, 'intermediate': 2, 'advanced': 3, 'native': 4}
+LANGUAGE_LEVEL_LABELS = {
+    1: 'Cơ bản',
+    2: 'Trung cấp',
+    3: 'Thành thạo',
+    4: 'Bản ngữ',
+}
+
 # Bảng tra từ đồng nghĩa kỹ thuật (Alias normalization)
 SKILL_ALIASES = {
     'js': 'javascript',

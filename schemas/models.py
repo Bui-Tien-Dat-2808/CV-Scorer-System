@@ -32,6 +32,7 @@ class JDRequirements(BaseModel):
     frameworks: Dict[str, int] = Field(default_factory=dict, description="Frameworks và level yêu cầu")
     databases: Dict[str, int] = Field(default_factory=dict, description="Cơ sở dữ liệu và level yêu cầu")
     foreign_languages: List[str] = Field(default_factory=list, description="Yêu cầu ngoại ngữ")
+    language_levels: Dict[str, int] = Field(default_factory=dict, description="Trình độ ngoại ngữ tối thiểu theo LANGUAGE_LEVELS")
     raw_description: Optional[str] = Field(default="", description="Mô tả công việc chi tiết nếu có")
 
 class ScoreBreakdown(BaseModel):

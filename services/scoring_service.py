@@ -1,12 +1,73 @@
 import re
 from typing import Dict, Any, Tuple, List
 
-from core.constants import SKILL_LEVEL_MAPPING, EDUCATION_RANKING, SKILL_ALIASES
+from core.constants import (
+    SKILL_LEVEL_MAPPING, EDUCATION_RANKING, SKILL_ALIASES,
+    LANGUAGE_LEVELS, LANGUAGE_LEVEL_LABELS
+)
 from core.logger import logger
 from utils.text_cleaner import clean_text
 
 # Tỷ trọng từng tiêu chí khi quy ra điểm tổng hợp thang 10.
 SCORING_WEIGHTS = {'skills': 0.6, 'experience': 0.2, 'education': 0.1, 'languages': 0.1}
+
+_CEFR_RANK = {'a1': 1, 'a2': 1, 'b1': 2, 'b2': 2, 'c1': 3, 'c2': 4}
+
+# Ngưỡng quy đổi chứng chỉ sang thang LANGUAGE_LEVELS, so từ band cao xuống thấp.
+_CERT_BANDS = [
+    (r'ielts\s*([0-9](?:\.[05])?)', [(8.5, 4), (7.0, 3), (5.0, 2)]),
+    (r'toeic\s*([0-9]{3,4})', [(945, 4), (785, 3), (600, 2)]),
+    (r'toefl(?:\s*ibt)?\s*([0-9]{2,3})', [(105, 4), (94, 3), (60, 2)]),
+]
+_JLPT_RANK = {'1': 3, '2': 2, '3': 1, '4': 1, '5': 1}
+_HSK_RANK = {'6': 4, '5': 3, '4': 2, '3': 2, '2': 1, '1': 1}
+_LANGUAGE_KEYWORD_RANK = [
+    (r'\bnative\b|bản\s*ngữ', 4),
+    (r'fluent|thành\s*thạo|proficient|advanced', 3),
+    (r'intermediate|trung\s*bình|\bkhá\b|working', 2),
+    (r'basic|cơ\s*bản|sơ\s*cấp|elementary', 1),
+]
+
+
+def language_evidence_level(evidence: str) -> int:
+    """
+    Suy trình độ ngoại ngữ từ chuỗi CV trích được, ví dụ 'English (IELTS 7.0)' -> 3.
+
+    Trả 1 (basic) khi chỉ thấy tên ngôn ngữ mà không có bằng chứng mức độ: ứng viên
+    vẫn được tính là có dùng ngôn ngữ đó, nhưng không đủ cho yêu cầu cao hơn.
+    """
+    text = (evidence or '').lower()
+
+    for pattern, bands in _CERT_BANDS:
+        match = re.search(pattern, text)
+        if not match:
+            continue
+        try:
+            score = float(match.group(1))
+        except ValueError:
+            continue
+        for threshold, rank in bands:
+            if score >= threshold:
+                return rank
+        return 1
+
+    match = re.search(r'jlpt\s*n?([1-5])', text)
+    if match:
+        return _JLPT_RANK[match.group(1)]
+
+    match = re.search(r'hsk\s*([1-6])', text)
+    if match:
+        return _HSK_RANK[match.group(1)]
+
+    match = re.search(r'\b([abc][12])\b', text)
+    if match:
+        return _CEFR_RANK[match.group(1)]
+
+    for pattern, rank in _LANGUAGE_KEYWORD_RANK:
+        if re.search(pattern, text):
+            return rank
+
+    return 1
 
 class ScoringService:
     def __init__(self):
@@ -163,36 +224,59 @@ class ScoringService:
         breakdown['Education_Details'] = f"{found_edu_str} vs {req_edu_str}"
         breakdown['Education'] = f"{found_edu_str} ({edu_status})"
 
-        # --- 4. Foreign Language (Chỉ Đạt / Chưa đạt, không chấm điểm) ---
+        # --- 4. Foreign Language (so cả tên lẫn trình độ, chỉ Đạt / Chưa đạt) ---
         req_langs = jd_requirements_parsed.get('foreign_languages', [])
+        req_levels = jd_requirements_parsed.get('language_levels', {})
         found_langs = cv_data.get('lang_extracted', [])
 
-        detected_names = []
-        if isinstance(found_langs, list):
+        # Tên chuẩn hoá -> chuỗi bằng chứng gốc, để vừa khớp tên vừa suy được trình độ
+        evidence_by_name: Dict[str, str] = {}
+        if isinstance(found_langs, dict):
+            for key, value in found_langs.items():
+                evidence_by_name[str(key).strip().lower()] = f"{key} ({value})" if value else str(key)
+        elif isinstance(found_langs, list):
             for item in found_langs:
-                if isinstance(item, str):
-                    base_lang = re.sub(r'\(.*?\)', '', item).strip().lower()
-                    detected_names.append(base_lang)
-        elif isinstance(found_langs, dict):
-            detected_names = [k.strip().lower() for k in found_langs.keys()]
+                if not isinstance(item, str):
+                    continue
+                base = re.sub(r'\(.*?\)', '', item).strip().lower()
+                if base:
+                    evidence_by_name[base] = item
 
         if not req_langs:
             lang_status = "Đạt"
             lang_ratio = 1.0
+            lang_detail = "JD không yêu cầu ngoại ngữ"
         else:
-            match_count = 0
+            matched = 0
+            lines = []
             for req in req_langs:
-                req_lower = req.strip().lower()
-                if any(req_lower in d or d in req_lower for d in detected_names):
-                    match_count += 1
-            lang_ratio = match_count / len(req_langs)
-            lang_status = "Đạt" if match_count >= len(req_langs) else "Chưa đạt"
+                req_name = req.strip()
+                req_key = req_name.lower()
+                required_rank = req_levels.get(req_name, 1)
+                found_key = next(
+                    (k for k in evidence_by_name if req_key in k or k in req_key),
+                    None
+                )
+                if found_key is None:
+                    lines.append(f"{req_name}: không ghi nhận (cần {LANGUAGE_LEVEL_LABELS[required_rank]})")
+                    continue
+
+                evidence = evidence_by_name[found_key]
+                found_rank = language_evidence_level(evidence)
+                if found_rank >= required_rank:
+                    matched += 1
+                    lines.append(f"{evidence} ≥ {LANGUAGE_LEVEL_LABELS[required_rank]}")
+                else:
+                    lines.append(f"{evidence} < {LANGUAGE_LEVEL_LABELS[required_rank]}")
+
+            lang_ratio = matched / len(req_langs)
+            lang_status = "Đạt" if matched == len(req_langs) else "Chưa đạt"
+            lang_detail = "; ".join(lines)
 
         cand_lang_str = ", ".join(cv_data.get('lang_extracted', [])) if cv_data.get('lang_extracted') else "Chưa ghi nhận"
-        req_lang_str = ", ".join(req_langs) if req_langs else "Không yêu cầu"
 
         breakdown['Languages_Status'] = lang_status
-        breakdown['Languages_Details'] = f"{cand_lang_str} (Yêu cầu: {req_lang_str})"
+        breakdown['Languages_Details'] = lang_detail
         breakdown['Languages'] = f"{cand_lang_str} ({lang_status})"
 
         # --- 5. Overall Recommendation (Đánh giá tổng hợp) ---

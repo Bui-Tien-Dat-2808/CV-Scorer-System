@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from core.config import settings
 from core.logger import logger
 from services.cv_parser_service import CVParserService
-from services.jd_parser_service import parse_jd_input, categorize_skills
+from services.jd_parser_service import parse_jd_input, categorize_skills, parse_language_requirements
 from services.scoring_service import ScoringService
 from services.history_service import HistoryService
 from services.llm_service import generate_ai_feedback
@@ -90,7 +90,10 @@ def health_check():
         "llm_cloud": "configured" if GeminiProvider().is_configured() else "missing_api_key",
         "llm_local": (
             "loaded" if LocalLLM.get_instance().is_loaded()
-            else "available" if _module_available("llama_cpp") else "missing_llama_cpp"
+            else "missing_llama_cpp" if not _module_available("llama_cpp")
+            # Có thư viện nhưng chưa có trọng số thì vẫn phải tải ~4.7GB, chưa chạy được.
+            else "missing_weights" if not LocalLLM.weights_cached()
+            else "available"
         ),
     }
     history_writable = os.access(os.path.dirname(history_service.file_path), os.W_OK)
@@ -130,12 +133,14 @@ async def evaluate_single_cv(
     required_experience_years: float = Form(2.0),
     education_level: str = Form("Bachelor"),
     tech_skills: str = Form("Python (Intermediate), FastAPI (Basic), PostgreSQL (Good), Docker (Basic)"),
-    foreign_languages: str = Form("English"),
-    llm_provider: str = Form("gemini"),
-    x_gemini_api_key: Optional[str] = Header(None)
+    foreign_languages: str = Form(""),
+    llm_provider: str = Form("gemini")
 ):
     """
     Thẩm định và chấm điểm một hồ sơ ứng viên đơn lẻ đối chiếu với tiêu chuẩn JD.
+
+    API key của Gemini chỉ lấy từ biến môi trường phía server — endpoint không nhận
+    key do client gửi lên, để secret không đi qua trình duyệt hay nằm trong log.
     """
     # 1. Kiểm tra định dạng file
     allowed_exts = {".pdf", ".docx", ".png", ".jpg", ".jpeg"}
@@ -166,12 +171,16 @@ async def evaluate_single_cv(
         info = parser_service.extract_info(cv_text, mode=mode)
 
         # 5. Phân tích JD & So khớp kỹ năng
-        raw_langs = [l.strip() for l in foreign_languages.split(",") if l.strip()]
+        try:
+            req_langs, lang_levels = parse_language_requirements(foreign_languages)
+        except ValueError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
         jd_parsed = parse_jd_input({
             "job_title": job_title,
             "required_experience_years": required_experience_years,
             "education_level": education_level,
-            "foreign_languages": raw_langs,
+            "foreign_languages": req_langs,
+            "language_levels": lang_levels,
             **categorize_skills(tech_skills.split(","))
         })
 
@@ -201,14 +210,13 @@ async def evaluate_single_cv(
         score, breakdown = scoring_service.calculate_score(cv_data_full, jd_parsed)
 
         # 7. Sinh Báo cáo Chuyên sâu & Bộ câu hỏi phỏng vấn
-        api_key_to_use = x_gemini_api_key or os.getenv("GEMINI_API_KEY", "")
         ai_feedback = generate_ai_feedback(
             cv_data=cv_data_full,
             jd_parsed=jd_parsed,
             match_score=score,
             breakdown=breakdown,
             provider_type=llm_provider,
-            api_key=api_key_to_use,
+            api_key=os.getenv("GEMINI_API_KEY", ""),
             local_llm_instance=LocalLLM.get_instance()
         )
 
@@ -250,17 +258,21 @@ async def batch_evaluate_cvs(
     required_experience_years: float = Form(2.0),
     education_level: str = Form("Bachelor"),
     tech_skills: str = Form("Python (Intermediate), PostgreSQL (Basic), Docker (Basic)"),
-    foreign_languages: str = Form("English")
+    foreign_languages: str = Form("")
 ):
     """
     Chấm điểm hàng loạt danh sách CV mẫu và xuất ra Bảng xếp hạng ứng viên.
     """
-    raw_langs = [l.strip() for l in foreign_languages.split(",") if l.strip()]
+    try:
+        req_langs, lang_levels = parse_language_requirements(foreign_languages)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     jd_parsed = parse_jd_input({
         "job_title": job_title,
         "required_experience_years": required_experience_years,
         "education_level": education_level,
-        "foreign_languages": raw_langs,
+        "foreign_languages": req_langs,
+        "language_levels": lang_levels,
         **categorize_skills(tech_skills.split(","))
     })
 

@@ -2,7 +2,7 @@
 import re
 from typing import Dict, List, Any
 from core.constants import (
-    SKILL_LEVEL_MAPPING, SKILL_ALIASES,
+    SKILL_LEVEL_MAPPING, SKILL_ALIASES, LANGUAGE_LEVELS,
     LANGUAGES, FRAMEWORKS, DATABASES, AI_ML_SKILLS, DEVOPS_TOOLS
 )
 from schemas.models import JDRequirements
@@ -77,6 +77,36 @@ def categorize_skills(raw_skills: List[str]) -> Dict[str, List[str]]:
 
     return buckets
 
+def parse_language_requirements(raw: str) -> tuple:
+    """
+    Tách chuỗi "English:advanced, Japanese:basic" thành (["English","Japanese"],
+    {"English": 3, "Japanese": 1}) theo thang LANGUAGE_LEVELS.
+
+    Chuỗi rỗng nghĩa là JD không yêu cầu ngoại ngữ -> ([], {}).
+    Mức độ không nêu thì coi như 'basic', tức chỉ bắt buộc sự hiện diện của ngôn ngữ.
+    """
+    names: List[str] = []
+    levels: Dict[str, int] = {}
+    for entry in (raw or "").split(","):
+        entry = entry.strip()
+        if not entry:
+            continue
+        language, _, level_token = entry.partition(":")
+        language = language.strip()
+        if not language:
+            continue
+        level_token = level_token.strip().lower() or "basic"
+        if level_token not in LANGUAGE_LEVELS:
+            raise ValueError(
+                f"Mức độ ngoại ngữ không hợp lệ: '{level_token}' (ngôn ngữ '{language}'). "
+                f"Chấp nhận: {', '.join(LANGUAGE_LEVELS)}"
+            )
+        if language not in names:
+            names.append(language)
+            levels[language] = LANGUAGE_LEVELS[level_token]
+    return names, levels
+
+
 def parse_jd_input(jd_raw_data: Dict[str, Any]) -> Dict[str, Any]:
     """
     Chuẩn hóa dữ liệu JD đầu vào từ UI/API thành dictionary chuẩn.
@@ -106,5 +136,6 @@ def to_jd_schema(jd_dict: Dict[str, Any]) -> JDRequirements:
         frameworks=jd_dict.get('frameworks', {}),
         databases=jd_dict.get('databases', {}),
         foreign_languages=jd_dict.get('foreign_languages', []),
+        language_levels=jd_dict.get('language_levels', {}),
         raw_description=jd_dict.get('raw_description', '')
     )

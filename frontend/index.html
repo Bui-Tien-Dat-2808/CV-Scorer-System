@@ -44,12 +44,6 @@
               Nhật ký Đánh giá
             </button>
           </nav>
-
-          <!-- System Status Indicator -->
-          <div class="hidden md:flex items-center space-x-2 text-xs text-slate-600 bg-slate-100 px-3 py-1.5 rounded-md border border-slate-200">
-            <span class="w-2 h-2 rounded-full bg-slate-400 inline-block flex-shrink-0" id="systemStatusDot"></span>
-            <span class="font-medium" id="systemStatusText">Đang kiểm tra hệ thống…</span>
-          </div>
         </div>
       </div>
     </div>
@@ -107,8 +101,22 @@
               </div>
 
               <div>
-                <label class="block text-xs font-semibold text-slate-700 mb-1">NGOẠI NGỮ BẮT BUỘC</label>
-                <input type="text" id="jdLang" class="w-full text-sm px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-600" value="English">
+                <label class="block text-xs font-semibold text-slate-700 mb-1">NGOẠI NGỮ YÊU CẦU</label>
+                <div class="flex items-center gap-4 mb-2">
+                  <label class="flex items-center text-xs text-slate-700 cursor-pointer">
+                    <input type="radio" name="langRequired" value="no" id="langReqNo" class="text-blue-600 focus:ring-blue-500">
+                    <span class="ml-1.5">Không yêu cầu</span>
+                  </label>
+                  <label class="flex items-center text-xs text-slate-700 cursor-pointer">
+                    <input type="radio" name="langRequired" value="yes" id="langReqYes" checked class="text-blue-600 focus:ring-blue-500">
+                    <span class="ml-1.5">Có yêu cầu</span>
+                  </label>
+                </div>
+                <div id="langReqRows" class="space-y-2"></div>
+                <button type="button" id="addLangReqBtn" class="mt-2 text-[11px] font-semibold text-blue-600 hover:text-blue-800">
+                  + Thêm ngoại ngữ
+                </button>
+                <p class="text-[11px] text-slate-500 mt-1">Ứng viên đạt khi có cùng ngôn ngữ ở trình độ bằng hoặc cao hơn mức yêu cầu.</p>
               </div>
             </div>
           </div>
@@ -144,7 +152,7 @@
           <!-- Evaluation Engine Selector -->
           <div class="card">
             <div class="card-header">
-              <span>3. Động cơ Phân tích Chuyên sâu (Verification Engine)</span>
+              <span>3. Chọn model đánh giá CV (Model Selection)</span>
             </div>
             <div class="card-body space-y-3">
               <div class="grid grid-cols-2 gap-3">
@@ -152,7 +160,7 @@
                   <input type="radio" name="llmProvider" value="gemini" checked class="text-blue-600 focus:ring-blue-500">
                   <div class="ml-2.5">
                     <div class="text-xs font-semibold text-slate-800">Cloud Enterprise</div>
-                    <div class="text-[11px] text-slate-500">Gemini 2.5 Flash API</div>
+                    <div class="text-[11px] text-slate-500">Gemini 3.6 Flash API</div>
                   </div>
                 </label>
                 <label class="flex items-center p-3 border rounded-md cursor-pointer hover:bg-slate-50 transition border-slate-200" id="engineLocalLabel">
@@ -162,11 +170,6 @@
                     <div class="text-[11px] text-slate-500">Local LLM GGUF</div>
                   </div>
                 </label>
-              </div>
-
-              <div id="apiKeyGroup" class="pt-1">
-                <label class="block text-xs font-semibold text-slate-700 mb-1">GEMINI API KEY (TÙY CHỌN NẾU SERVER ĐÃ CÓ BIẾN MÔI TRƯỜNG)</label>
-                <input type="password" id="geminiApiKey" class="w-full text-xs px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-600 font-mono" placeholder="AIzaSy... (để trống nếu dùng server default)">
               </div>
 
               <button id="btnEvaluate" type="button" class="w-full btn-primary flex items-center justify-center space-x-2 py-2.5 text-sm font-semibold">

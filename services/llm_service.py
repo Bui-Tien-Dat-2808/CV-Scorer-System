@@ -1,23 +1,32 @@
 # services/llm_service.py
 from typing import Dict, Any, Optional
+from core.constants import LANGUAGE_LEVEL_LABELS
 from core.logger import logger
 from models.llm_model import GeminiProvider, LocalLLM, LLMProviderError
 
 SYSTEM_PROMPT = """Bạn là một Chuyên gia Tuyển dụng Kỹ thuật Cấp cao (Lead Technical Recruiter) và Kiến trúc sư Hệ thống (Principal Engineer).
 Nhiệm vụ của bạn là phân tích sâu hồ sơ ứng viên (CV) đối chiếu với bản mô tả công việc (JD), đưa ra nhận xét chuyên môn sắc sảo, công tâm và xây dựng bộ câu hỏi phỏng vấn kỹ thuật cá nhân hóa cho ứng viên đó."""
 
-# Thông báo thân thiện gửi về UI: không chứa exception text hay chi tiết kỹ thuật thô.
+# Thông báo thân thiện gửi về UI: không chứa stack trace hay body lỗi thô của Google.
+# Phần "Nguyên nhân" được nối thêm từ exception của chính ta, vốn chỉ gồm mã trạng thái
+# HTTP và diễn giải ngắn — người dùng đọc là biết phải sửa gì.
 CLOUD_UNAVAILABLE_NOTICE = """### ⚠️ Báo cáo thẩm định AI tạm hoãn
 
-Hệ thống không sinh được nhận xét chuyên sâu: Google Gemini không khả dụng và động cơ Local LLM chưa được nạp sẵn.
+Hệ thống không sinh được nhận xét chuyên sâu: động cơ Google Gemini không trả về được nội dung, và Local LLM dự phòng chưa được nạp sẵn.
 
-Điểm số và các tiêu chí đối chiếu ở trên vẫn hợp lệ. **Cách khắc phục:** kiểm tra lại `GEMINI_API_KEY` (ô cấu hình hoặc file `.env`), hoặc nạp mô hình On-Premise Local LLM rồi chọn lại động cơ."""
+Điểm số và các tiêu chí đối chiếu ở trên vẫn hợp lệ. **Cách khắc phục:** đặt `GEMINI_API_KEY` trong file `.env` của server rồi khởi động lại (giao diện không còn ô nhập key), hoặc nạp mô hình On-Premise Local LLM rồi chọn lại động cơ."""
 
 LOCAL_UNAVAILABLE_NOTICE = """### ⚠️ Báo cáo thẩm định AI tạm hoãn
 
-Không thể nạp hoặc chạy mô hình Local LLM (thiếu thư viện `llama-cpp-python` hoặc trọng số GGUF).
+Không thể nạp hoặc chạy mô hình Local LLM.
 
-Điểm số và các tiêu chí đối chiếu ở trên vẫn hợp lệ. **Cách khắc phục:** cài `llama-cpp-python` và cho phép tải trọng số vào `models_cache/`, hoặc chuyển sang động cơ Google Gemini."""
+Điểm số và các tiêu chí đối chiếu ở trên vẫn hợp lệ. **Cách khắc phục:** cài `llama-cpp-python` (`pip install llama-cpp-python`) và để máy tự tải trọng số GGUF ở lần chạy đầu, hoặc chuyển sang động cơ Google Gemini."""
+
+
+def _notice_with_reason(template: str, reason: str) -> str:
+    """Gắn nguyên nhân đã làm sạch vào thông báo để UI không còn là một hộp lỗi vô nghĩa."""
+    reason = " ".join(str(reason).split())[:400]
+    return f"{template}\n\n**Nguyên nhân:** {reason}" if reason else template
 
 def build_evaluation_prompt(cv_data: Dict[str, Any], jd_parsed: Dict[str, Any], match_score: float, breakdown: Dict[str, str]) -> str:
     """Xây dựng Prompt chi tiết theo kỹ thuật Chain-of-Thought & Role Prompting."""
@@ -53,6 +62,13 @@ def build_evaluation_prompt(cv_data: Dict[str, Any], jd_parsed: Dict[str, Any], 
             req_skills.append(f"{s} (Level {l})")
     req_skills_str = ", ".join(req_skills) if req_skills else "Chưa chỉ định rõ"
 
+    # Ngoại ngữ JD yêu cầu, kèm trình độ tối thiểu tương ứng
+    req_langs = []
+    for lang in jd_parsed.get('foreign_languages', []):
+        rank = jd_parsed.get('language_levels', {}).get(lang, 1)
+        req_langs.append(f"{lang} (tối thiểu {LANGUAGE_LEVEL_LABELS[rank]})")
+    req_langs_str = ", ".join(req_langs) if req_langs else "Không bắt buộc"
+
     prompt = f"""Hãy lập Báo cáo Phân tích Chuyên sâu (Technical Evaluation Report) bằng Tiếng Việt theo cấu trúc chuẩn Markdown cho hồ sơ sau:
 
 ### 1. THÔNG TIN VỊ TRÍ TUYỂN DỤNG (JD)
@@ -60,7 +76,7 @@ def build_evaluation_prompt(cv_data: Dict[str, Any], jd_parsed: Dict[str, Any], 
 - Số năm kinh nghiệm yêu cầu: {jd_parsed.get('required_experience_years', 0)} năm
 - Bằng cấp yêu cầu: {jd_parsed.get('education_level', 'Bachelor')}
 - Kỹ năng & Công nghệ cốt lõi: {req_skills_str}
-- Ngoại ngữ yêu cầu: {', '.join(jd_parsed.get('foreign_languages', [])) or 'Không bắt buộc'}
+- Ngoại ngữ yêu cầu: {req_langs_str}
 
 ### 2. THÔNG TIN ỨNG VIÊN (CV)
 - Họ và tên: {cv_data.get('full_name', 'Ứng viên')}
@@ -121,16 +137,19 @@ def generate_ai_feedback(
             logger.info("Đang sinh báo cáo thẩm định qua Google Gemini API...")
             provider = GeminiProvider(api_key=api_key)
             return provider.generate_analysis(prompt, system_instruction=SYSTEM_PROMPT)
-        except LLMProviderError as e:
+        except LLMProviderError as gemini_error:
             # Gemini thất bại thật sự (thiếu key / API lỗi) -> fallback sang Local LLM đã nạp sẵn.
-            logger.warning(f"Gemini không khả dụng: {e}. Thử fallback sang Local LLM...")
+            logger.warning(f"Gemini không khả dụng: {gemini_error}. Thử fallback sang Local LLM...")
             local = local_llm_instance or LocalLLM.get_instance()
             if local.is_loaded():
                 try:
                     return local.generate_response(prompt, system_instruction=SYSTEM_PROMPT)
                 except LLMProviderError as local_error:
                     logger.error(f"Local LLM fallback thất bại: {local_error}")
-            return CLOUD_UNAVAILABLE_NOTICE
+                    return _notice_with_reason(
+                        CLOUD_UNAVAILABLE_NOTICE, f"Gemini {gemini_error} · Local {local_error}"
+                    )
+            return _notice_with_reason(CLOUD_UNAVAILABLE_NOTICE, str(gemini_error))
 
     elif provider_type == "local":
         local = local_llm_instance or LocalLLM.get_instance()
@@ -139,6 +158,6 @@ def generate_ai_feedback(
             return local.generate_response(prompt, system_instruction=SYSTEM_PROMPT)
         except LLMProviderError as e:
             logger.error(f"Local LLM không khả dụng: {e}")
-            return LOCAL_UNAVAILABLE_NOTICE
+            return _notice_with_reason(LOCAL_UNAVAILABLE_NOTICE, str(e))
 
     return "Động cơ LLM không hợp lệ."
